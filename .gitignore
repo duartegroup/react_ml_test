@@ -1,0 +1,5 @@
+*Zone.Identifier
+helpers/__pycache__/
+*.pdf
+*.npz
+*.model

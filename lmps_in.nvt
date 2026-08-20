@@ -1,0 +1,65 @@
+units metal
+boundary        p p p
+atom_style atomic
+atom_modify map yes
+newton on
+read_data in.data
+
+mass 1 12.011 # C mass
+mass 2 15.999 # O mass
+mass 3 1.008 # H mass
+pair_style	mace no_domain_decomposition
+pair_coeff	* * MACE_model_swa.model-lammps.pt C O H
+
+neighbor 2.0 bin
+neigh_modify every 1 delay 0 check yes
+
+variable Nfreq equal 100
+variable Nprint equal 100
+variable Nevery equal 100
+variable Nrepeat equal ${Nfreq}/${Nevery}
+variable Ndump equal 100
+variable nAtoms equal atoms
+
+# define number of steps, temperature, damping, timestep
+variable Nrun0 equal 50000
+variable TargetTemp equal 300
+variable Damping equal 0.1
+timestep 0.0005 # 0.5 fs
+
+fix removeMomentum all momentum 1 linear 1 1 1
+
+compute T all temp
+fix TempAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_T
+
+variable P equal press
+fix PressAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_P
+
+variable v equal vol
+fix vAve all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_v
+
+#variable PE_Atom equal c_PE/v_nAtoms
+#fix PEAve_Atom all ave/time ${Nevery} ${Nrepeat} ${Nfreq} v_PE_Atom
+
+thermo_style custom step cpu temp f_TempAve press f_PressAve #f_PEAve_Atom vol f_vAve
+thermo_modify flush yes
+
+thermo ${Nfreq}
+
+dump traj       all atom 10 dump_nvt_C*.dat
+
+# create initial dry run configuration to setup system
+if "${Nrun0} > 0 && $(step) == 0" then "velocity all create 1500 42"
+run 0
+
+# define simulation ensemble (integration), with thermostat target and damping parameter
+fix integrate all nvt temp TargetTemp TargetTemp Damping
+
+# run simulation up to Nrun0 steps
+if "$(step) < ${Nrun0}" then "run ${Nrun0} upto"
+
+# remove integration
+unfix integrate
+
+# rwrite output data to specified output file
+write_data out_data

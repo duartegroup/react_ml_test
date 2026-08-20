@@ -1,0 +1,35 @@
+# First Steps
+
+git clone --branch=mace --depth=1 https://github.com/ACEsuit/lammps
+wget https://download.pytorch.org/libtorch/cu121/libtorch-shared-with-deps-2.2.0%2Bcu121.zip
+unzip libtorch-shared-with-deps-2.2.0+cu121.zip
+rm libtorch-shared-with-deps-2.2.0+cu121.zip
+mv libtorch libtorch-gpu
+
+# log in to GPU node interactively then:
+module load intel-mkl-2017.4-gcc-5.4.0-2tzpyn7  # WHICHEVER GCC YOU HAVE
+module load rhel8/slurm rhel8/global gcc/9 openmpi/gcc/9.3/4.0.4 cuda/12.1 cudnn  # WHICHEVER CUDA YOU HAVE
+
+# Compile LAMMPS:
+cd lammps
+mkdir build-ampere
+cd build-ampere
+cmake \
+    -D CMAKE_BUILD_TYPE=Release \
+    -D CMAKE_INSTALL_PREFIX=$(pwd) \
+    -D CMAKE_CXX_STANDARD=17 \
+    -D CMAKE_CXX_STANDARD_REQUIRED=ON \
+    -D BUILD_MPI=ON \
+    -D BUILD_SHARED_LIBS=ON \
+    -D PKG_KOKKOS=ON \
+    -D Kokkos_ENABLE_CUDA=ON \
+    -D CMAKE_CXX_COMPILER=$(pwd)/../lib/kokkos/bin/nvcc_wrapper \
+    -D Kokkos_ARCH_AMDAVX=ON \
+    -D Kokkos_ARCH_AMPERE100=ON \
+    -D CMAKE_PREFIX_PATH=$(pwd)/../../libtorch-gpu \
+    -D PKG_ML-MACE=ON \
+    ../cmake
+make -j 20
+make install
+
+# run lmps executable in script

@@ -1,0 +1,12 @@
+1
+config_1: ideal geometry
+O      0.0000    0.0000    0.0000
+2
+config_2: bent geometry
+O      0.0000    0.0000    0.0000
+H      0.9572    0.0000    0.0000
+3
+config_3: stretched OH bond
+O      0.0000    0.0000    0.0000
+H      1.2000    0.0000    0.0000
+H     -0.2390    0.9266    0.0000

@@ -1,0 +1,15 @@
+1
+Lattice="20.0 0.0 0.0 0.0 20.0 0.0 0.0 0.0 20.0" Properties=species:S:1:pos:R:3:forces:R:3 config_type=IsolatedAtom energy=-1028.97565 pbc"F F F"
+C         0.00000000       0.00000000       0.00000000      -0.00000000      -0.00000000      -0.00000000
+1
+Lattice="20.0 0.0 0.0 0.0 20.0 0.0 0.0 0.0 20.0" Properties=species:S:1:pos:R:3:forces:R:3 config_type=IsolatedAtom energy=-13.56881 pbc"F F F"
+H         0.00000000       0.00000000       0.00000000      -0.00000000      -0.00000000      -0.00000000
+1
+Lattice="20.0 0.0 0.0 0.0 20.0 0.0 0.0 0.0 20.0" Properties=species:S:1:pos:R:3:forces:R:3 config_type=IsolatedAtom energy=-2043.90942 pbc"F F F"
+O         0.00000000       0.00000000       0.00000000      -0.00000000      -0.00000000      -0.00000000
+1
+Lattice="20.0 0.0 0.0 0.0 20.0 0.0 0.0 0.0 20.0" Properties=species:S:1:pos:R:3:forces:R:3 config_type=IsolatedAtom energy=-12522.62756 pbc"F F F"
+I         0.00000000       0.00000000       0.00000000      -0.00000000      -0.00000000      -0.00000000
+1
+Lattice="20.0 0.0 0.0 0.0 20.0 0.0 0.0 0.0 20.0" Properties=species:S:1:pos:R:3:forces:R:3 config_type=IsolatedAtom energy=-8102.53248 pbc"F F F"
+Cl         0.00000000       0.00000000       0.00000000      -0.00000000      -0.00000000      -0.00000000
