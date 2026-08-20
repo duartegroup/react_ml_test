@@ -45,3 +45,7 @@ Notes:
     - DESCRIPTION: analyse the spread of your dataset about a reaction coordinate, with SOAP descriptors, energy / force distributions etc.
 
 ##  Analysis
+
+- scripts/run_test_set_comparison.py
+  - DESCRIPTION: Runs the main energy / force comparisons of a selection of specified models. Precalculated reuslts will be loaded from cached npz files.
+  - USAGE: Add relevant parameters in python script and then run.
