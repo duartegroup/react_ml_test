@@ -2,8 +2,6 @@
 
 Tools and scripts for training / evaluating machine-learned interatomic potentials (MLIPs) for chemical reactions in vacuum and solution, as part of the pre-print: "Data-efficient fine-tuning for reaction modelling in explicit solvent" (Holownia, J.; Juraskova, V.; Deringer, V. L., Duarte, F., 2026): https://chemrxiv.org/doi/abs/10.26434/chemrxiv.15007217/v1.
 
-This repository is a pip-installable Python package, installed as the distribution `react_ml_test_public`.
-
 ## Setup
 
 1. Create a conda environment with the required MLIP stack. For example, clone `mlptrain` separately and run its `./install_mace.sh` script - this provides the conda environment named `mlptrain-mace`:
@@ -22,16 +20,16 @@ This repository is a pip-installable Python package, installed as the distributi
 
 Notes:
 - Run all scripts from the repository root directory. The scripts read `data/`, `models/`, `inputs/` and write to `out/` relative to the current working directory, so they must be launched from the repo root (or a directory containing these folders).
-- Only lightweight, PyPI-only dependencies are listed in `pyproject.toml`. The MLIP stack (MACE, mlptrain, autode, torchani, graph-pes, load-atoms, etc.) is installed from via the mlp-train environment.
+- Only lightweight, PyPI-only dependencies are listed in `pyproject.toml`. The MLIP stack (MACE, mlptrain, autode, torchani, graph-pes, load-atoms, etc.) is installed via the `mlptrain-mace` environment.
 - For some features a specific fork of MACE is required (e.g. train loss logging + patience warmup, please let me know if you need these features!)
 - To run the ani-1nxr model, you must have the neurchem project in the parent directory of this repo. You must also then ensure you have the `libcublas.so.9.2` file (from CUDA 9.2) added to the `LD_LIBRARY_PATH`.
 
 ## Running scripts
 
-Installing the package (see [Setup](#setup)) puts a single `rmlt` command on your `PATH`.
+Installing the package (see [Setup](#setup)) add the `rmlt` command to your `PATH`.
 Workflow scripts live in the `react_ml_test_public.scripts` package, and `rmlt` runs one of
 them by name from the repository root (the scripts read `data/`, `models/`, `inputs/` and
-write to `out/` relative to the current working directory, so this is required):
+write to `out/` relative to the current working directory):
 
 ```bash
 rmlt run-test-set-comparison
@@ -45,9 +43,11 @@ with:
 rmlt list
 ```
 
-Anything after the script name is passed through to the script as its arguments. The scripts
-remain ordinary modules, so the same one can also be run directly if you prefer:
-`python -m react_ml_test_public.scripts.run_test_set_comparison`.
+Anything after the script name is passed through to the script as its arguments. Scripts can alsoe be run as ordinary modules, if you prefer:
+
+```
+python -m react_ml_test_public.scripts.run_test_set_comparison
+```
 
 ## Examples
 
