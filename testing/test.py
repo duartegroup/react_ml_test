@@ -3,28 +3,28 @@ Test scripts for react ml test repo.
 """
 import os
 import unittest
-import sys
-
-from react_ml_test.helpers.sampling import sample_dataset
 
 
-sys.path.append("../")
+from react_ml_test_public.helpers.sampling import sample_dataset
+
+
+
 from mace.calculators import MACECalculator
 from ase.build import molecule
 from ase import units
 from ase.md.langevin import Langevin
 from ase.io import read
-from react_ml_test.helpers.sorting import sort_configs_by_cv_dist, sort_configs_by_soap_desc
-from react_ml_test.helpers.plot import correlation_scatter_plot
-from react_ml_test.helpers.traj_eval import atom_distance_plot, print_atom_distance_table
-from react_ml_test.helpers.dynamics import get_trajectory_with_mlptrain
-from react_ml_test.helpers.settings import DATASETS_DIR, MD_INPUT_DIR, MODEL_DIR, OUT_DIR, TEST_DATA_DIR, TEST_DIR, TEST_PLT_DIR, TEST_TRJ_DIR, TRAIN_SUBSETS_DIR
-from react_ml_test.helpers.utils import calc_energy_shifts, eV_to_meV_per_atom, guess_per_element_mean_energies, load_model_calculator
-from react_ml_test.helpers.model_eval import get_model_predictions, get_test_and_pred_data
-from react_ml_test.helpers.descriptors import get_soap_descriptors
-from react_ml_test.helpers.dim_red import calc_best_similarities, run_umap
-from react_ml_test.helpers.io import flexible_ase_read, get_name_from_path, get_xyz_config_offsets, load_data_cache, save_dataset_batches, save_npz_data_cache
-from react_ml_test.helpers.stats import calculate_comp_rmse, calculate_mae, calculate_rmse
+from react_ml_test_public.helpers.sorting import sort_configs_by_cv_dist, sort_configs_by_soap_desc
+from react_ml_test_public.helpers.plot import correlation_scatter_plot
+from react_ml_test_public.helpers.traj_eval import atom_distance_plot, print_atom_distance_table
+from react_ml_test_public.helpers.dynamics import get_trajectory_with_mlptrain
+from react_ml_test_public.helpers.settings import DATASETS_DIR, MD_INPUT_DIR, MODEL_DIR, OUT_DIR, TEST_DATA_DIR, TEST_DIR, TEST_PLT_DIR, TEST_TRJ_DIR, TRAIN_SUBSETS_DIR
+from react_ml_test_public.helpers.utils import calc_energy_shifts, eV_to_meV_per_atom, guess_per_element_mean_energies, load_model_calculator
+from react_ml_test_public.helpers.model_eval import get_model_predictions, get_test_and_pred_data
+from react_ml_test_public.helpers.descriptors import get_soap_descriptors
+from react_ml_test_public.helpers.dim_red import calc_best_similarities, run_umap
+from react_ml_test_public.helpers.io import flexible_ase_read, get_name_from_path, get_xyz_config_offsets, load_data_cache, save_dataset_batches, save_npz_data_cache
+from react_ml_test_public.helpers.stats import calculate_comp_rmse, calculate_mae, calculate_rmse
 import glob
 import numpy as np
 import torch
