@@ -38,6 +38,11 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/duartegroup/react_ml_test"
 
+# The `rmlt` console command (see react_ml_test_public/_cli.py) dispatches to any
+# workflow module in react_ml_test_public.scripts, e.g. `rmlt run-test-set-comparison`.
+[project.scripts]
+rmlt = "react_ml_test_public._cli:main"
+
 # `find` only discovers packages (dirs with __init__.py), so the non-code
 # react_ml_test_public/scripts/dft/ dir is automatically excluded from the wheel.
 [tool.setuptools.packages.find]

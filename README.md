@@ -12,14 +12,14 @@ This repository is a pip-installable Python package, installed as the distributi
    pip install hdf5plugin
    pip install seaborn
    ```
-2. Install this package (editable is recommended while developing):
+2. Install this package into the environment. **This install is required** — it provides the
+   `rmlt` command used to run the workflow scripts (see [Running the scripts](#running-the-scripts)),
+   rather than loose files in a checkout. An editable install is recommended while developing:
    ```bash
    pip install -e .
    ```
-   A regular install also works:
-   ```bash
-   pip install .
-   ```
+   A regular install (`pip install .`) also works, but then code edits only take effect after
+   reinstalling.
 
 Notes:
 - Run all scripts from the repository root directory. The scripts read `data/`, `models/`, `inputs/` and write to `out/` relative to the current working directory, so they must be launched from the repo root (or a directory containing these folders).
@@ -29,21 +29,26 @@ Notes:
 
 ## Running the scripts
 
-Each workflow script can be run in its historical form from the repository root:
+Installing the package (see [Setup](#setup)) puts a single `rmlt` command on your `PATH`.
+Workflow scripts live in the `react_ml_test_public.scripts` package, and `rmlt` runs one of
+them by name from the repository root (the scripts read `data/`, `models/`, `inputs/` and
+write to `out/` relative to the current working directory, so this is required):
 
 ```bash
-python scripts/run_test_set_comparison.py
+rmlt run-test-set-comparison
 ```
 
-or, equivalently, as a package module:
+Dashes and underscores are interchangeable, so `rmlt run_test_set_comparison` is the same
+command. List all available scripts (auto-discovered from `react_ml_test_public/scripts/`)
+with:
 
 ```bash
-python -m react_ml_test_public.scripts.run_test_set_comparison
+rmlt list
 ```
 
-The `scripts/` folder at the repository root contains thin launchers that hand off to
-`react_ml_test_public.scripts.*` (so the two invocations are identical), and they also work from a
-plain checkout without installing the package.
+Anything after the script name is passed through to the script as its arguments. The scripts
+remain ordinary modules, so the same one can also be run directly if you prefer:
+`python -m react_ml_test_public.scripts.run_test_set_comparison`.
 
 ## Examples
 
@@ -51,7 +56,7 @@ Note:
 
 ### 1. Energy + force errors of zero-shot and fine-tuned models for CPD + MVK DA system.
 
-Run ```python scripts/run_test_set_comparison_yaml.py``` (edit the input parameters / YAML path at the bottom of the script, or pass in `inputs/eg1.yaml` as shown in the script header).
+Run ```rmlt run-test-set-comparison-yaml``` (edit the input parameters / YAML path at the bottom of the script, or pass in `inputs/eg1.yaml` as shown in the script header).
 
 ### 2.
 
@@ -65,36 +70,36 @@ Run ```python scripts/run_test_set_comparison_yaml.py``` (edit the input paramet
 
 ### 1. Dataset preparation (existing labelled xyz files)
 
-#### 1. `python scripts/save_npz_as_xyz.py`
+#### 1. `rmlt save-npz-as-xyz`
 
 #### 2. `scripts/ref_energy_ref_force_label.sh <dir>`
 
     - DESCRIPTION: Bash script to relabel energy and force labels to REF_energy and REF_force, compatible with MACE.
     - USAGE:
 
-#### 3. `python scripts/add_xyz_metadata.py`
+#### 3. `rmlt add-xyz-metadata`
 
     - DESCRIPTION: Adds some xyz metadata to an .xyz file (= i.e. config type labels / box dimensions).
     - USAGE: Add relevant parameters in the python script and then run.
 
-#### 4. `python scripts/filter_datasets.py`
+#### 4. `rmlt filter-datasets`
 
     - DESCRIPTION: Script to filter and / or combine .xyz file datasets.
     - USAGE: Add relevant parameters in the python script and then run, use this as in the other examples to first do force filtering, then filter by config type to create subsets.
 
-#### 5. `python scripts/save_train_test_split.py`
+#### 5. `rmlt save-train-test-split`
 
     - DESCRIPTION: Script to perform a train / valid / test split of an input dataset (or group of datasets) and save these as separate files.
     - USAGE: Combine all dataset subset sources (i.e. AL vac / solv + additional vacuum / solv configs) and split them into for e.g. a 70:10:20 train/valid/test split.
              Then use script in 4. to create train / valid / test vacuum / solvated subsets.
 
-#### 6. `python scripts/run_ds_analysis.py`
+#### 6. `rmlt run-ds-analysis`
 
     - DESCRIPTION: analyse the spread of your dataset about a reaction coordinate, with SOAP descriptors, energy / force distributions etc.
 
 ### 2. Analysis
 
-- `python scripts/run_test_set_comparison.py`
+- `rmlt run-test-set-comparison`
   - DESCRIPTION: Runs the main energy / force comparisons of a selection of specified models. Precalculated results will be loaded from cached npz files.
   - USAGE: Add relevant parameters in the python script and then run.
 
@@ -103,8 +108,7 @@ Run ```python scripts/run_test_set_comparison_yaml.py``` (edit the input paramet
 ```
 react_ml_test_public/     # the installable Python package
 ├── helpers/              # library code (import react_ml_test_public.helpers.*)
-└── scripts/              # workflow modules (import react_ml_test_public.scripts.<name>)
-scripts/                  # repo-root launchers: `python scripts/<name>.py`
+└── scripts/              # workflow modules (run via `rmlt <name>`)
 data/                     # runtime data (read relative to the working directory)
 models/
 inputs/
@@ -113,4 +117,5 @@ testing/
 ```
 
 All Python code uses absolute imports under the `react_ml_test_public` namespace, so it can be
-used both as an installed package and run directly from a checkout.
+run as an installed package. The package must be installed with `pip install -e .` (or
+`pip install .`) for the scripts to be runnable.
