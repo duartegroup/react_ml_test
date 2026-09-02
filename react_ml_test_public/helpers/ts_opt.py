@@ -10,11 +10,11 @@ from ase.io import write as ase_write
 from ase.mep import DimerControl, MinModeAtoms, MinModeTranslate
 from ase.vibrations import Vibrations
 
-from react_ml_test_public.helpers.io import flexible_ase_read
+from react_ml_test_public.helpers.io import flexible_ase_read, load_model_calculator
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.settings import OPT_DIR, VIB_DIR
 from react_ml_test_public.helpers.stats import calculate_rmse
-from react_ml_test_public.helpers.utils import get_solv_shell, load_model_calculator
+from react_ml_test_public.helpers.solvation import get_solv_shell
 
 
 def mlip_dimer_method(input_config_fp: str, 

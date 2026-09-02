@@ -14,6 +14,7 @@ from react_ml_test_public.helpers.io import (
     flexible_ase_read,
     get_name_from_path,
     get_xyz_file_len,
+    load_model_calculator,
 )
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.settings import (
@@ -26,7 +27,6 @@ from react_ml_test_public.helpers.settings import (
     NPZ_DIR,
     PLOT_DIR,
 )
-from react_ml_test_public.helpers.utils import load_model_calculator
 
 # set CUDA device
 CUDA_DEVICE_NUM = 0

@@ -14,7 +14,7 @@ from ase.io import read as ase_read
 from ase.io import write as ase_write
 
 from react_ml_test_public.helpers.dynamics import get_trajectory_with_ase
-from react_ml_test_public.helpers.io import get_ase_atoms_energy
+from react_ml_test_public.helpers.io import get_ase_atoms_energy, load_model_calculator
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.plot import index_plot
 from react_ml_test_public.helpers.settings import (
@@ -29,7 +29,6 @@ from react_ml_test_public.helpers.settings import (
     MDSettings,
 )
 from react_ml_test_public.helpers.ts_opt import get_vib_freq, mlip_dimer_method
-from react_ml_test_public.helpers.utils import load_model_calculator
 
 if __name__ == "__main__":
 

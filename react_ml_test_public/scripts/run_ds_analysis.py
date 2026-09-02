@@ -14,6 +14,7 @@ from react_ml_test_public.helpers.io import (
     get_name_from_path,
     load_data_cache,
     load_hdf5_cache,
+    load_model_calculator,
     save_npz_data_cache,
 )
 from react_ml_test_public.helpers.logging import logger
@@ -45,7 +46,6 @@ from react_ml_test_public.helpers.settings import (
 from react_ml_test_public.helpers.utils import (
     eV_to_meV_per_atom,
     get_ase_props,
-    load_model_calculator,
     natural_sort_key,
     unflatten_array_by_lengths,
 )

@@ -8,7 +8,7 @@ from ase.io import read
 import ase
 from react_ml_test_public.helpers.settings import MDSettings, TRAJ_DIR
 from react_ml_test_public.helpers.logging import logger
-from react_ml_test_public.helpers.utils import load_model_calculator
+from react_ml_test_public.helpers.io import load_model_calculator
 
 
 def get_trajectory_with_ase(init_config: ase.Atoms,

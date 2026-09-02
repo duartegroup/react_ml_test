@@ -3,10 +3,10 @@ Helpers for eval of models.
 """
 from typing import Callable, Literal, Tuple, List, TextIO
 import numpy as np
-from react_ml_test_public.helpers.io import flexible_ase_read, get_name_from_path, load_isolated_atom_energies, load_data_cache, save_npz_data_cache
+from react_ml_test_public.helpers.io import flexible_ase_read, get_name_from_path, load_isolated_atom_energies, load_data_cache, load_model_calculator, save_npz_data_cache
 from react_ml_test_public.helpers.settings import EV, EV_PER_AMSTRONG, MEV, MEV_PER_AMSTRONG, MEV_PER_ATOM, NPZ_DIR
 from react_ml_test_public.helpers.utils import convert_units, get_ase_props
-from react_ml_test_public.helpers.utils import calc_energy_shifts, guess_per_element_mean_energies, load_model_calculator
+from react_ml_test_public.helpers.utils import calc_energy_shifts, guess_per_element_mean_energies
 from react_ml_test_public.helpers.logging import logger
 
 

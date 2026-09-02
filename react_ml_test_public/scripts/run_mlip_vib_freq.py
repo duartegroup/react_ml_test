@@ -4,7 +4,7 @@ Script to get vibrational frequency summary for an input geometry with a set of 
 from ase import Atoms
 from ase.calculators.calculator import Calculator
 
-from react_ml_test_public.helpers.io import flexible_ase_read, get_name_from_path
+from react_ml_test_public.helpers.io import flexible_ase_read, get_name_from_path, load_model_calculator
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.settings import (
     ANTHRACENE_DA_DATA_DIR,
@@ -16,7 +16,6 @@ from react_ml_test_public.helpers.settings import (
     VIB_DIR,
 )
 from react_ml_test_public.helpers.ts_opt import get_vib_freq
-from react_ml_test_public.helpers.utils import load_model_calculator
 
 if __name__ == "__main__":
 

@@ -14,7 +14,7 @@ from ase.io import read
 from react_ml_test_public.helpers.optimisation import dimer_method
 
 from react_ml_test_public.helpers.dynamics import get_trajectory_with_ase
-from react_ml_test_public.helpers.io import get_name_from_path
+from react_ml_test_public.helpers.io import get_name_from_path, load_model_calculator
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.settings import (
     CPD_MVK_DA_DATA_DIR,
@@ -28,7 +28,6 @@ from react_ml_test_public.helpers.settings import (
     TRAJ_DIR,
     MDSettings,
 )
-from react_ml_test_public.helpers.utils import load_model_calculator
 
 # set CUDA device
 CUDA_DEVICE_NUM = 0

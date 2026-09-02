@@ -2,30 +2,51 @@
 Random helper functions.
 """
 import copy
+import hashlib
 import math
 import os
-from typing import Callable, Dict, List, Literal, TextIO, Union
-import numpy as np
 import re
+from typing import Callable, Dict, List, Literal, TextIO, Union
+
+import ase
 import numpy as np
-import hashlib
 import pandas as pd
-from sklearn.metrics import r2_score
-from react_ml_test_public.helpers.io import get_ase_atoms_energy, get_ase_atoms_forces
-from react_ml_test_public.helpers.io import flexible_ase_read, get_name_from_path, load_data_cache, save_npz_data_cache
-import torchani
+import torch
 from mace.calculators import MACECalculator
 from mace.tools.utils import AtomicNumberTable
-from react_ml_test_public.helpers.settings import ANI_1XNR_MODEL_DIR, ANI_MODEL_LOADER, ANI_MODELS, EV, \
-                                           EV_PER_AMSTRONG, FORMATTED_MODEL_NAMES, GRAPH_PES_MODEL_LOADER, \
-                                           KCAL_PER_MOL, KJ_PER_MOL, MACE_MODEL_LOADER, MACE_MODELS, MEV, \
-                                           MEV_PER_AMSTRONG, MEV_PER_ATOM, MODEL_DIR, NPZ_DIR, TORCH_ANI_RESOURCES_DIR, \
-                                           eV_to_kJ_mol, eV_to_kcal_mol, eV_to_mEV
-import ase
-import torch
 from sklearn.linear_model import Ridge
-from react_ml_test_public.helpers.stats import calculate_comp_rmse, calculate_mae, calculate_mag_rmse, calculate_rmse, round_sigfigs
-from react_ml_test_public.helpers.logging import logger
+from sklearn.metrics import r2_score
+
+from react_ml_test_public.helpers.io import (
+    flexible_ase_read,
+    get_ase_atoms_energy,
+    get_ase_atoms_forces,
+    get_name_from_path,
+    load_data_cache,
+    save_npz_data_cache,
+)
+from react_ml_test_public.helpers.settings import (
+    EV,
+    EV_PER_AMSTRONG,
+    FORMATTED_MODEL_NAMES,
+    KCAL_PER_MOL,
+    KJ_PER_MOL,
+    MEV,
+    MEV_PER_AMSTRONG,
+    MEV_PER_ATOM,
+    NPZ_DIR,
+    eV_to_kcal_mol,
+    eV_to_kJ_mol,
+    eV_to_mEV,
+)
+from react_ml_test_public.helpers.stats import (
+    calculate_comp_rmse,
+    calculate_mae,
+    calculate_mag_rmse,
+    calculate_rmse,
+    round_sigfigs,
+)
+
 
 def format_value_with_uncertainty(value: float, 
                                   z: float):
@@ -253,83 +274,6 @@ def guess_per_element_mean_energies(
 def get_formatted_model_name(model_name: str):
     return FORMATTED_MODEL_NAMES.get(model_name) if model_name in FORMATTED_MODEL_NAMES.keys() else model_name
 
-
-def load_model_calculator(model_name: str, 
-                          device='cuda:0', 
-                          model_loader: Literal['MACE', 'ani', 'graph-pes'] = None,
-                          enable_cueq: bool = False,
-                          dtype: Literal["", "float32", "float64"] = "",
-                          head: str = "Default"):
-    """
-    Flexible model loader for different types of model based on model_name (i.e. ACE models/ MACE models / ANI models / transformer models etc.)
-    """
-
-    try:
-
-        # attempt to load model_loader from model name
-        if model_loader is None:
-
-            if model_name in MACE_MODELS:
-                model_loader = MACE_MODEL_LOADER
-            elif model_name in ANI_MODELS:
-                model_loader = ANI_MODEL_LOADER
-            elif any(sub_model_name in model_name for sub_model_name in MACE_MODELS + ['MACE', 'EGRET']):
-                model_loader = MACE_MODEL_LOADER
-            elif any(sub_model_name in model_name for sub_model_name in ANI_MODELS):
-                model_loader = ANI_MODELS
-            else:
-                model_loader = MACE_MODEL_LOADER  # default to MACE model loader!
-            
-        if model_loader == MACE_MODEL_LOADER:
-            
-            # mace model loader
-            return MACECalculator(model_paths=f"{MODEL_DIR}/{model_name}.model", 
-                                device=device, 
-                                enable_cueq=enable_cueq,
-                                default_dtype=dtype,
-                                head=head
-                                )
-        
-        elif model_loader == ANI_MODEL_LOADER:
-
-            # ani model loader
-
-            # read constants from constant file and construct AEV computer.
-            const_fpath = f'{ANI_1XNR_MODEL_DIR}/{model_name}/rHCNO-5.2R_32-3.5A_a8-4.params'  # noqa: E501
-            consts = torchani.neurochem.Constants(const_fpath)
-            aev_computer = torchani.AEVComputer(**consts)
-
-            # read self energies and construct energy shifter.
-            sae_fpath = f'{ANI_1XNR_MODEL_DIR}/{model_name}/sae_linfit.dat'  # noqa: E501
-            energy_shifter = torchani.neurochem.load_sae(sae_fpath)
-
-            # ensemble of models
-            # model_prefix = os.path.join(path, f'{ANI_1XNR_MODEL_DIR}/{model_name}/train')  # noqa: E501
-            # ensemble = torchani.neurochem.load_model_ensemble(consts.species, model_prefix, 8)  # noqa: E501
-
-            # single model
-            model_dir = f'{ANI_1XNR_MODEL_DIR}/{model_name}/train0/networks'  # noqa: E501
-            model = torchani.neurochem.load_model(consts.species, model_dir)
-
-            # create pipeline for computing energies
-            nnp = torchani.nn.Sequential(aev_computer, model, energy_shifter)
-
-            # get torchani ASE calculator (calculates in Hartrees)
-            return torchani.ase.Calculator(consts.species, nnp)
-        
-        elif model_loader == GRAPH_PES_MODEL_LOADER:
-
-            from graph_pes.models import load_model
-
-            model = load_model(f"{MODEL_DIR}/{model_name}.model")
-            model.to(dtype=torch.float64)
-            return model.ase_calculator()
-        else:
-            raise NameError(f"Model loader: {model_loader} is not valid.")
-    
-    except Exception as e:
-        logger.info(f"{model_name} was unable to be loaded because of error: \n{e} \n... Returning None for calc instead...")
-        return None
 
 def add_to_mace_z_table(calc: MACECalculator, 
                         atom_nums: list[int]):
