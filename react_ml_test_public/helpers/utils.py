@@ -226,7 +226,7 @@ def guess_per_element_mean_energies(
 
     configs = flexible_ase_read(configs_fpath, cust_props_parser=custom_xyz_parser)
 
-    if calc is None:
+    if calc_name is None:
         energies = np.array([get_ase_atoms_energy(config) for config in configs], dtype=np.float64)
     else:
 

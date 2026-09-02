@@ -210,11 +210,11 @@ def run_model_comparison_on_test_set(model_names: List[str],
                     ps_ids = [i for i in sorted_indices if sorted_dists[i] < ref_ts_dist - ts_dist_low_threshold]
                     print('Total Num configs: ', len(sorted_indices))
                     print('Num RS Configs: ', len(rs_ids))
-                    print([f'(r1: {configs[i].get_distance(*react_coords[0])}, r2: {configs[i].get_distance(*react_coords[1])})' for i in rs_ids])
+                    # print([f'(r1: {configs[i].get_distance(*react_coords[0])}, r2: {configs[i].get_distance(*react_coords[1])})' for i in rs_ids])
                     print('Num TS Configs: ', len(ts_ids))
-                    print([f'(r1: {configs[i].get_distance(*react_coords[0])}, r2: {configs[i].get_distance(*react_coords[1])})' for i in ts_ids])
+                    # print([f'(r1: {configs[i].get_distance(*react_coords[0])}, r2: {configs[i].get_distance(*react_coords[1])})' for i in ts_ids])
                     print('Num PS Configs: ', len(ps_ids))
-                    print([f'(r1: {configs[i].get_distance(*react_coords[0])}, r2: {configs[i].get_distance(*react_coords[1])})' for i in ps_ids])
+                    # print([f'(r1: {configs[i].get_distance(*react_coords[0])}, r2: {configs[i].get_distance(*react_coords[1])})' for i in ps_ids])
 
 
             test_energies = test_energies[sorted_indices]
@@ -437,25 +437,32 @@ def run_model_comparison_on_test_set(model_names: List[str],
 
 if __name__ == "__main__":
 
-    """Input YAML format.
+    """Run an MLIP test-set comparison.
 
-    YAML file: inputs/eg1.yaml
+    The path to the input YAML file is given as a single command-line argument:
+
+        rmlt run-test-set-comparison inputs/eg1.yaml
+
+    (or equivalently: python -m react_ml_test_public.scripts.run_test_set_comparison
+    inputs/eg1.yaml)
+
+    Input YAML format (see inputs/test/CPD_MVK_DA_FT42_test.yaml for a full example):
 
     Fields:
-        model_names: List of model names to compare.
-        n: Training set size.
-        ft_train_name: Fine-tuning training set name.
-        test_name: Test set name.
-        rep_num: Fine-tuned model repetition number.
-        omol_rep_num: OMOL model repetition number.
-        omol_energy_str: OMOL energy suffix/prefix string.
-        test_set_ids: Test-set indices to calculate.
-        save_name: Output name.
-        run_names: Run names to process.
-        plot: Whether to generate plots.
-        num_base_models: Number of base models.
-        num_base_model_comps: Number of comparisons per base model.
-        alpha_list: Alpha values used for plotting.
+        model_names:            # list of model names to compare.
+        n:                      # training set size.
+        ft_train_name:          # fine-tuning training set name.
+        test_name:              # test set name.
+        rep_num:                # fine-tuned model repetition number.
+        omol_rep_num:           # OMOL specific model replicate number.
+        omol_energy_str:        # OMOL specific energy suffix/prefix string.
+        test_set_ids:           # test-set indices to calculate.
+        save_name:              # output name.
+        run_names:              # run names to process.
+        plot:                   # whether to generate plots.
+        num_base_models:        # number of base models.
+        num_base_model_comps:   # number of comparisons per base model.
+        alpha_list:             # alpha values used for plotting.
 
     Any omitted field is set to None.
     """
@@ -474,8 +481,34 @@ if __name__ == "__main__":
     offset_ref_fpath = None
     sample_str = ""
 
-    with open("inputs/eg1.yaml", "r") as f:
+    import argparse
+
+    # Input YAML config path is given as a single command-line argument.
+    parser = argparse.ArgumentParser(
+        description="Run an MLIP test-set comparison driven by an input YAML config "
+                    "file (format described above).",
+        epilog="Example: rmlt run-test-set-comparison inputs/eg1.yaml",
+    )
+    parser.add_argument(
+        "input_yaml",
+        help="Path to the input YAML config file (e.g. inputs/eg1.yaml).",
+    )
+    args = parser.parse_args()
+
+    # safeguards
+    input_yaml_fpath = args.input_yaml
+    if not input_yaml_fpath.endswith((".yaml", ".yml")):
+        parser.error(f"Input file must be a YAML file (.yaml / .yml), got: {input_yaml_fpath!r}")
+    if not os.path.isfile(input_yaml_fpath):
+        parser.error(f"Input YAML file not found: {input_yaml_fpath!r}")
+
+    with open(input_yaml_fpath, "r") as f:
         input_config = yaml.safe_load(f) or {}
+    if not isinstance(input_config, dict):
+        parser.error(
+            f"Input YAML must be a mapping of config fields (see format above), got a "
+            f"{type(input_config).__name__}: {input_yaml_fpath!r}"
+        )
 
     model_names = input_config.get("model_names", None)
     n = input_config.get("n", None)

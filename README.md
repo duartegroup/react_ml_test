@@ -32,7 +32,7 @@ them by name from the repository root (the scripts read `data/`, `models/`, `inp
 write to `out/` relative to the current working directory):
 
 ```bash
-rmlt run-test-set-comparison
+rmlt run-test-set-comparison <args>
 ```
 
 Dashes and underscores are interchangeable, so `rmlt run_test_set_comparison` is the same
@@ -43,7 +43,7 @@ with:
 rmlt list
 ```
 
-Anything after the script name is passed through to the script as its arguments. Scripts can alsoe be run as ordinary modules, if you prefer:
+Scripts can also be run as ordinary modules, if you prefer:
 
 ```
 python -m react_ml_test_public.scripts.run_test_set_comparison
@@ -55,9 +55,11 @@ Note:
 
 ### 1. Energy + force errors of zero-shot and fine-tuned models for CPD + MVK DA system.
 
-Run ```rmlt run-test-set-comparison-yaml``` (edit the input parameters / YAML path at the bottom of the script, or pass in `inputs/eg1.yaml` as shown in the script header).
+Run: ```rmlt run-test-set-comparison inputs/test/CPD_MVK_DA_FT42_test.yaml```.
 
-### 2. 
+### 2. IRC energy barrier for zero-shot + FT42 models for CPD + MVK DA system
+
+Run: ```rmlt run-test-set-comparison inputs/CPD_MVK_DA_FT42_IRC.yaml```.
 
 ### 3.
 
