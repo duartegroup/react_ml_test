@@ -439,63 +439,70 @@ def load_model_calculator(model_name: str,
     """
     Flexible model loader for different types of model based on model_name (i.e. ACE models/ MACE models / ANI models / transformer models etc.)
     """
-    # attempt to load model_loader from model name
-    if model_loader is None:
 
-        if model_name in MACE_MODELS:
-            model_loader = MACE_MODEL_LOADER
-        elif model_name in ANI_MODELS:
-            model_loader = ANI_MODEL_LOADER
-        elif any(sub_model_name in model_name for sub_model_name in MACE_MODELS + ['MACE', 'EGRET']):
-            model_loader = MACE_MODEL_LOADER
-        elif any(sub_model_name in model_name for sub_model_name in ANI_MODELS):
-            model_loader = ANI_MODELS
+    try:
+
+        # attempt to load model_loader from model name
+        if model_loader is None:
+
+            if model_name in MACE_MODELS:
+                model_loader = MACE_MODEL_LOADER
+            elif model_name in ANI_MODELS:
+                model_loader = ANI_MODEL_LOADER
+            elif any(sub_model_name in model_name for sub_model_name in MACE_MODELS + ['MACE', 'EGRET']):
+                model_loader = MACE_MODEL_LOADER
+            elif any(sub_model_name in model_name for sub_model_name in ANI_MODELS):
+                model_loader = ANI_MODELS
+            else:
+                model_loader = MACE_MODEL_LOADER  # default to MACE model loader!
+
+        if model_loader == MACE_MODEL_LOADER:
+
+            # mace model loader (imported lazily to keep io.py importable without MACE)
+            from mace.calculators import MACECalculator
+
+            return MACECalculator(model_paths=f"{MODEL_DIR}/{model_name}.model",
+                                device=device,
+                                enable_cueq=enable_cueq,
+                                default_dtype=dtype,
+                                head=head
+                                )
+
+        elif model_loader == ANI_MODEL_LOADER:
+
+            # ani model loader (torchani imported lazily)
+            import torchani
+
+            # read constants from constant file and construct AEV computer.
+            const_fpath = f'{ANI_1XNR_MODEL_DIR}/{model_name}/rHCNO-5.2R_32-3.5A_a8-4.params'  # noqa: E501
+            consts = torchani.neurochem.Constants(const_fpath)
+            aev_computer = torchani.AEVComputer(**consts)
+
+            # read self energies and construct energy shifter.
+            sae_fpath = f'{ANI_1XNR_MODEL_DIR}/{model_name}/sae_linfit.dat'  # noqa: E501
+            energy_shifter = torchani.neurochem.load_sae(sae_fpath)
+
+            # single model
+            model_dir = f'{ANI_1XNR_MODEL_DIR}/{model_name}/train0/networks'  # noqa: E501
+            model = torchani.neurochem.load_model(consts.species, model_dir)
+
+            # create pipeline for computing energies
+            nnp = torchani.nn.Sequential(aev_computer, model, energy_shifter)
+
+            # get torchani ASE calculator (calculates in Hartrees)
+            return torchani.ase.Calculator(consts.species, nnp)
+
+        elif model_loader == GRAPH_PES_MODEL_LOADER:
+
+            from graph_pes.models import load_model
+            import torch
+
+            model = load_model(f"{MODEL_DIR}/{model_name}.model")
+            model.to(dtype=torch.float64)
+            return model.ase_calculator()
         else:
-            model_loader = MACE_MODEL_LOADER  # default to MACE model loader!
-
-    if model_loader == MACE_MODEL_LOADER:
-
-        # mace model loader (imported lazily to keep io.py importable without MACE)
-        from mace.calculators import MACECalculator
-
-        return MACECalculator(model_paths=f"{MODEL_DIR}/{model_name}.model",
-                            device=device,
-                            enable_cueq=enable_cueq,
-                            default_dtype=dtype,
-                            head=head
-                            )
-
-    elif model_loader == ANI_MODEL_LOADER:
-
-        # ani model loader (torchani imported lazily)
-        import torchani
-
-        # read constants from constant file and construct AEV computer.
-        const_fpath = f'{ANI_1XNR_MODEL_DIR}/{model_name}/rHCNO-5.2R_32-3.5A_a8-4.params'  # noqa: E501
-        consts = torchani.neurochem.Constants(const_fpath)
-        aev_computer = torchani.AEVComputer(**consts)
-
-        # read self energies and construct energy shifter.
-        sae_fpath = f'{ANI_1XNR_MODEL_DIR}/{model_name}/sae_linfit.dat'  # noqa: E501
-        energy_shifter = torchani.neurochem.load_sae(sae_fpath)
-
-        # single model
-        model_dir = f'{ANI_1XNR_MODEL_DIR}/{model_name}/train0/networks'  # noqa: E501
-        model = torchani.neurochem.load_model(consts.species, model_dir)
-
-        # create pipeline for computing energies
-        nnp = torchani.nn.Sequential(aev_computer, model, energy_shifter)
-
-        # get torchani ASE calculator (calculates in Hartrees)
-        return torchani.ase.Calculator(consts.species, nnp)
-
-    elif model_loader == GRAPH_PES_MODEL_LOADER:
-
-        from graph_pes.models import load_model
-        import torch
-
-        model = load_model(f"{MODEL_DIR}/{model_name}.model")
-        model.to(dtype=torch.float64)
-        return model.ase_calculator()
-    else:
-        raise NameError(f"Model loader: {model_loader} is not valid.")
+            raise NameError(f"Model loader: {model_loader} is not valid.")
+    
+    except Exception as e:
+        logger.warning(f"{model_name} was unable to be loaded because of error: \n{e} \n... Returning None for calc instead...")
+        return None

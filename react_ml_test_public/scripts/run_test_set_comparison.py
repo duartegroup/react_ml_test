@@ -4,12 +4,10 @@ Script to compare MLIPs running inference on specified test sets.
 import glob
 import os
 import re
-
 from typing import Callable, List, Tuple
 
 import numpy as np
 import pandas as pd
-
 
 import ase
 import matplotlib.pyplot as plt
@@ -439,12 +437,35 @@ def run_model_comparison_on_test_set(model_names: List[str],
 
 if __name__ == "__main__":
 
+    """Input YAML format.
+
+    YAML file: inputs/eg1.yaml
+
+    Fields:
+        model_names: List of model names to compare.
+        n: Training set size.
+        ft_train_name: Fine-tuning training set name.
+        test_name: Test set name.
+        rep_num: Fine-tuned model repetition number.
+        omol_rep_num: OMOL model repetition number.
+        omol_energy_str: OMOL energy suffix/prefix string.
+        test_set_ids: Test-set indices to calculate.
+        save_name: Output name.
+        run_names: Run names to process.
+        plot: Whether to generate plots.
+        num_base_models: Number of base models.
+        num_base_model_comps: Number of comparisons per base model.
+        alpha_list: Alpha values used for plotting.
+
+    Any omitted field is set to None.
+    """
+
+    import yaml
+
     model_loaders = None
     global_plot_settings = PlotSettings()
     corr_plot_set = PlotSettings()
-    plot = True
     custom_xyz_parsers = None
-    rep_num = None
     test_set_force_atom_ids = None
     test_set_names = None
     react_coords = None
@@ -453,147 +474,29 @@ if __name__ == "__main__":
     offset_ref_fpath = None
     sample_str = ""
 
-    # ===== SPECIFY MODELS TO COMPARE HERE =====
+    with open("inputs/eg1.yaml", "r") as f:
+        input_config = yaml.safe_load(f) or {}
 
-    # --- zero-shot comparison for paper ---
-    # model_names = [
-    #     # 'GO-MACE-23', 
-    #     # 'MACE-OFF23_medium', 
-    #     # 'MACE-MP-0b3_medium',
-    #     # 'EGRET_1T', 
-    #     # 'MACE-NEB',
-    #     # 'ani-1xnr',
-    #     # 'MACE-ANI-CC',
-    #     'MACE-omol-0-extra-large-1024'
-    # ]
-    # save_name = "paper_zero_shot"
-    # run_names = ['']
-    # plot = False
-    # global_plot_settings = PlotSettings(show_legend=False, legend_loc="upper right", 
-    #                                     custom_colour_list=list(PAPER_MODEL_COLOURS.values()))
-    # test_name = "anthracene_DA_test"
-    # test_name = "guajadial_DA_test"
+    model_names = input_config.get("model_names", None)
+    n = input_config.get("n", None)
+    ft_train_name = input_config.get("ft_train_name", None)
+    test_name = input_config.get("test_name", None)
+    rep_num = input_config.get("rep_num", None)
+    omol_rep_num = input_config.get("omol_rep_num", None)
+    omol_energy_str = input_config.get("omol_energy_str", None)
+    test_set_ids = input_config.get("test_set_ids", None)
+    save_name = input_config.get("save_name", None)
+    run_names = input_config.get("run_names", None)
+    plot = input_config.get("plot", None)
+    num_base_models = input_config.get("num_base_models", None)
+    num_base_model_comps = input_config.get("num_base_model_comps", None)
+    alpha_list = input_config.get("alpha_list", None)
 
-    # --- specific fine-tuned model comparison (+ zero shot) ---
-
-    # SPECIFY FINE-TUNED SYSTEM:
-    
-    # cpd mvk
-    n, ft_train_name, test_name, rep_num, omol_rep_num, omol_energy_str = 42, "CPD_MVK_DA_train", "CPD_MVK_DA_test", 1, 1, 'energy_'
-    # sample_str = ''
-    sample_str = 'ts_gauss_'
     energies_ylim, forces_ylim = (-0.1, 120), (7.0, 1001.0)
 
-    # anthracene
-    # n, ft_train_name, test_name, rep_num, omol_rep_num, omol_energy_str = 46, "anthracene_DA_train", "anthracene_DA_test", 2, 3, 'energy_'
-    # # n, ft_train_name, test_name, rep_num, omol_rep_num, omol_energy_str = 46, "anthracene_DA_train", "anthracene_DA_traj", 2, 3, 'energy_'
-    # sample_str = ''
-    # energies_ylim, forces_ylim = (-0.1, 20.0), (7.0, 1001.0)
-
-    # guajadial
-    # n, ft_train_name, test_name, rep_num, omol_rep_num, omol_energy_str = 50, "guajadial_DA_train", "guajadial_DA_test", 1, 1, ''
-    # sample_str = ''
-    # energies_ylim, forces_ylim = (-0.0, 15.0), (7.0, 2001.0)
-
-    # CHOOSE WHICH TEST SETS TO BE CALCULATED:
-    # test_set_ids = [0, 1, 2]     # for energy bar plots (All, Vac, Solv)
-    # test_set_ids = [0, 1, 3, 5]  # for force bar plots (All, Vac, Solv React, Solv)
-    test_set_ids = [i for i in range(6)]  # all (for violin plots, full analysis)
-
-    model_names = [
-                f"GO-MACE-23",
-                # f"GO-MACE-23_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_rep_{rep_num}",
-                f"GO-MACE-23_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_energy_rep_{rep_num}",
-                # f"GO-MACE-23_from_scratch_{ft_train_name}_{n}_config_strat_{sample_str}energy_rep_{rep_num}",
-                # f"GO-MACE-23_{ft_train_name}_fine_tuned_rep_1",
-                # f"GO-MACE-23_{ft_train_name}_fine_tuned_energy_rep_1",
-                # f"GO-MACE-23_{ft_train_name}_from_scratch_rep_1",
-                # f"GO-MACE-23_{ft_train_name}_from_scratch_energy_rep_1",
-                f"MACE-OFF23_medium", 
-                # f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_rep_{rep_num}", 
-                f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_energy_rep_{rep_num}",
-                # f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_energy_rep_3",
-                # f"MACE-OFF23_medium_from_scratch_{ft_train_name}_{n}_config_strat_{sample_str}energy_rep_{rep_num}",
-                # f"MACE-OFF23_medium_{ft_train_name}_fine_tuned_rep_1",
-                # f"MACE-OFF23_medium_{ft_train_name}_fine_tuned_energy_rep_1",
-                # f"MACE-OFF23_medium_{ft_train_name}_from_scratch_rep_1",
-                # f"MACE-OFF23_medium_{ft_train_name}_from_scratch_energy_rep_1",
-                f"MACE-MP-0b3_medium",
-                # f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_rep_{rep_num}",
-                # f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_energy_rep_1",
-                f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_energy_rep_{rep_num}",
-                # f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_energy_rep_3",
-                # f"MACE_MP0_from_scratch_{ft_train_name}_{n}_config_strat_{sample_str}energy_rep_{rep_num}",
-                # f"MACE-MP-0b3_medium_{ft_train_name}_fine_tuned_rep_1",
-                # f"MACE-MP-0b3_medium_{ft_train_name}_fine_tuned_energy_rep_1",
-                # f"MACE_MP0_{ft_train_name}_from_scratch_rep_1",
-                # f"MACE_MP0_{ft_train_name}_from_scratch_energy_rep_1",
-                'MACE-omol-0-extra-large-1024',
-                # f"MACE-omol-0-extra-large-1024_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_rep_1",
-                # f"MACE-omol-0-extra-large-1024_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_rep_2",
-                # f"MACE-omol-0-extra-large-1024_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_rep_3",
-                # f"MACE-omol-0-extra-large-1024_{ft_train_name}_fine_tuned_rep_1",
-                # f"MACE-omol-0-extra-large-1024_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_energy_rep_1",
-                # f"MACE-omol-0-extra-large-1024_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_energy_rep_2",
-                f"MACE-omol-0-extra-large-1024_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_{omol_energy_str}rep_{omol_rep_num}",
-                # f"MACE-omol-0-extra-large-1024_{ft_train_name}_fine_tuned_energy_rep_1",
-                ]
-    # save_name = f"paper_zero_shot_models"
-    save_name = f"paper_select_ft_models"
-    # save_name = f"paper_select_full_ft_models"
-    # save_name = f"omol_comp"
-    # save_name = f"paper_select_and_full_models"
-    # save_name = f"paper_select_ft_models_energy_comp"
-    # save_name = f"paper_ft_all_comp_rep_{rep_num}"
-
-    # # # anthracene w/ extra samples 
-    # # # model_names = [
-    # # #             f"GO-MACE-23_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_{rep_num}",
-    # # #             f"anthracene_DA_GO46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_rep_{rep_num}",
-    # # #             f"anthracene_DA_GO46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_energy_rep_{rep_num}",
-    # # #             f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_{rep_num}",
-    # # #             f"anthracene_DA_OFF46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_rep_{rep_num}",
-    # # #             f"anthracene_DA_OFF46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_energy_rep_{rep_num}",
-    # # #             f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_{rep_num}",
-    # # #             f"anthracene_DA_MP46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_rep_{rep_num}",
-    # # #             f"anthracene_DA_MP46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_energy_rep_{rep_num}",
-    # # #             ]
-    # # # save_name = f"paper_ft_anthracene_extra_config"
-    # # uniform random vs ts gaussian sampling
-    # # model_names = [
-    # #         # f"GO-MACE-23_{ft_train_name}_{n}_config_strat_fine_tuned_rep_{rep_num}",
-    # #         f"GO-MACE-23_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_{rep_num}",
-    # #         # f"GO-MACE-23_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_rep_1",
-    # #         # f"GO-MACE-23_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_rep_2",
-    # #         # f"GO-MACE-23_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_rep_3",
-    # #         f"GO-MACE-23_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_1",
-    # #         f"GO-MACE-23_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_2",
-    # #         f"GO-MACE-23_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_3",
-    # #         # f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_fine_tuned_rep_{rep_num}",
-    # #         f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_{rep_num}",
-    # #         # f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_rep_1",
-    # #         # f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_rep_2",
-    # #         # f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_rep_3",
-    # #         f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_1",
-    # #         f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_2",
-    # #         f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_3",
-    # #         f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_{rep_num}",
-    # #         # f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_rep_1",
-    # #         # f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_rep_2",
-    # #         # f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_rep_3",
-    # #         f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_1",
-    # #         f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_2",
-    # #         f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_3",
-    # #         f"MACE-omol-0-extra-large-1024_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_{rep_num}",
-    # #         f"MACE-omol-0-extra-large-1024_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_1",
-    # #         f"MACE-omol-0-extra-large-1024_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_2",
-    # #         f"MACE-omol-0-extra-large-1024_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_3",
-    # #         ]
-    # # save_name = f"paper_ft_sample_method_comp"
+    # ==============================================
 
     labels = [get_formatted_model_name(model_name) for model_name in model_names]
-    run_names = ['']
-    plot = True  # True
 
     # just one set of models
     # global_plot_settings = PlotSettings(show_legend=False, legend_loc="upper right", 
@@ -601,10 +504,6 @@ if __name__ == "__main__":
     #                                     energies_ylim=(0.0, 20.0), forces_ylim=(0.0, 200.0))
 
     # comparison to reference set too
-    num_base_models = 4
-    # num_base_model_comps, alpha_list = 3, [0.2, 0.6, 0.9]  # 2 by default
-    num_base_model_comps, alpha_list = 2, [0.3, 0.9]  # 2 by default
-    # num_base_model_comps, alpha_list = 1, [0.3, 0.3]  # 2 by default
     global_plot_settings = global_plot_settings._replace(custom_colour_list = [x for colour in PAPER_MODEL_COLOURS.values() for x in [colour] * num_base_model_comps], 
                                                          custom_linestyle_list=['-'] * len(model_names), 
                                                          custom_alpha_list=alpha_list * num_base_models, # (len(model_names) // 2),

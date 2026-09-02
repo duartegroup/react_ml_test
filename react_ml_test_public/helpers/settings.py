@@ -7,13 +7,11 @@ from typing import List, Literal, NamedTuple
 
 import matplotlib.pyplot as plt
 
-user = os.environ.get("USER") if any(x in platform.node() for x in ('htc', 'arc')) else None
-if user == "jjourde":
-    root_data_dir = "/data/chem-cat/jjourde/"
-elif user == "reub0549":
-    root_data_dir = "/data/chem-amais-epsrc/reub0549/"
+# set root dir for inputs / outputs
+if any(x in platform.node() for x in ('htc', 'arc')):
+    root_data_dir = os.path.join(os.environ["DATA"], os.environ.get("USER"))
 else:
-    root_data_dir = "./"
+    root_data_dir = "./" 
 
 # input paths
 MODEL_DIR = f"{root_data_dir}models" if any(x in platform.node() for x in ('htc', 'arc')) else "models"  

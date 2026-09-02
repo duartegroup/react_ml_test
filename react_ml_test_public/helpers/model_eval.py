@@ -103,14 +103,16 @@ def get_model_predictions(model_name: str,
                                                      'energy_unit': EV, 'force_unit': EV_PER_AMSTRONG})
         else:
             logger.info("Calculating model energies and force predictions...")
-            pred_energies = get_ase_props(configs, 'energy', calc=calculator, pbc_cell=pbc_box)
-            pred_forces = get_ase_props(configs, 'forces', calc=calculator, pbc_cell=pbc_box) if include_forces else None       
+            if calculator is not None:
+                pred_energies = get_ase_props(configs, 'energy', calc=calculator, pbc_cell=pbc_box)
+                pred_forces = get_ase_props(configs, 'forces', calc=calculator, pbc_cell=pbc_box) if include_forces else None       
 
-            # TODO: refactor this all to allow for un-flattened force arrays         
-
-            # save predictions to npz cache
-            save_npz_data_cache(npz_cache_path, {'energies': pred_energies, 'forces': pred_forces, 
-                                                 'energy_unit': EV, 'force_unit': EV_PER_AMSTRONG})
+                # save predictions to npz cache
+                save_npz_data_cache(npz_cache_path, {'energies': pred_energies, 'forces': pred_forces, 
+                                                    'energy_unit': EV, 'force_unit': EV_PER_AMSTRONG})
+            else:
+                # logger.warning(f"NO MODEL CALCULATOR, AND NO NPZ CACHE FOUND for {model_name}... Add {model_name} to ./models and try again.")
+                raise OSError(f"NO MODEL CALCULATOR, AND NO NPZ CACHE FOUND for {model_name}... Add {model_name} to ./models and try again.")
 
         # apply offset if specified
         if pred_energy_offsets is not None:
