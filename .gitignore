@@ -1,5 +1,17 @@
 *Zone.Identifier
-helpers/__pycache__/
 *.pdf
 *.npz
 *.model
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/

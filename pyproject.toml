@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "react_ml_test_public"
+version = "0.1.0"
+description = "Tools and scripts for building and testing reactive machine-learned interatomic potentials (MLIPs) for chemical reactions in vacuum and solution."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "JoeHolownia" }]
+keywords = ["machine learning", "MLIP", "reactions", "materials", "ASE", "MACE"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering :: Chemistry",
+]
+
+# NB: only lightweight, PyPI-only packages are listed here. The MLIP stack that this
+# project builds on (MACE, mlptrain, autode, torchani, graph-pes, load-atoms, etc.) is
+# typically installed from conda / custom forks and is expected to be provided by the
+# environment. See README.md for the full environment requirements.
+dependencies = [
+    "numpy",
+    "scipy",
+    "pandas",
+    "matplotlib",
+    "seaborn",
+    "scikit-learn",
+    "PyYAML",
+    "h5py",
+    "hdf5plugin",
+]
+
+[project.urls]
+Repository = "https://github.com/duartegroup/react_ml_test"
+
+# `find` only discovers packages (dirs with __init__.py), so the non-code
+# react_ml_test_public/scripts/dft/ dir is automatically excluded from the wheel.
+[tool.setuptools.packages.find]
+include = ["react_ml_test_public*"]
+
+[tool.setuptools]
+# data/ models/ inputs/ out/ testing/ are runtime data kept at the repository root and
+# are read via cwd-relative paths defined in react_ml_test_public/helpers/settings.py. They are
+# intentionally NOT bundled into the wheel.
+include-package-data = false
