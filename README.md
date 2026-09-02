@@ -1,8 +1,8 @@
 # react_ml_test_public
 
-Tools and scripts for building and testing reactive machine-learned interatomic potentials (MLIPs) for chemical reactions in vacuum and solution.
+Tools and scripts for training / evaluating machine-learned interatomic potentials (MLIPs) for chemical reactions in vacuum and solution, as part of the pre-print: "Data-efficient fine-tuning for reaction modelling in explicit solvent" (Holownia, J.; Juraskova, V.; Deringer, V. L., Duarte, F., 2026): https://chemrxiv.org/doi/abs/10.26434/chemrxiv.15007217/v1.
 
-This repository is a pip-installable Python package, installed as the distribution `react_ml_test_public` and imported as `react_ml_test_public.*`. The import namespace is intentionally distinct from `react_ml_test` so that this public copy can coexist in the same environment as the private `react_ml_test` repository. The heavy MLIP stack (MACE, mlptrain, autode, ...) is **not** installed by pip - it is expected to be provided by your (conda) environment (see [Setup](#setup)).
+This repository is a pip-installable Python package, installed as the distribution `react_ml_test_public`.
 
 ## Setup
 
@@ -18,16 +18,15 @@ This repository is a pip-installable Python package, installed as the distributi
    ```bash
    pip install -e .
    ```
-   A regular install (`pip install .`) also works, but then code edits only take effect after
-   reinstalling.
+   A regular install (`pip install .`) also works, but will ignore future code edits.
 
 Notes:
 - Run all scripts from the repository root directory. The scripts read `data/`, `models/`, `inputs/` and write to `out/` relative to the current working directory, so they must be launched from the repo root (or a directory containing these folders).
-- Only lightweight, PyPI-only dependencies are listed in `pyproject.toml`. The MLIP stack (MACE, mlptrain, autode, torchani, graph-pes, load-atoms, etc.) is typically installed from conda / custom forks and must be present in the environment.
+- Only lightweight, PyPI-only dependencies are listed in `pyproject.toml`. The MLIP stack (MACE, mlptrain, autode, torchani, graph-pes, load-atoms, etc.) is installed from via the mlp-train environment.
 - For some features a specific fork of MACE is required (e.g. train loss logging + patience warmup, please let me know if you need these features!)
 - To run the ani-1nxr model, you must have the neurchem project in the parent directory of this repo. You must also then ensure you have the `libcublas.so.9.2` file (from CUDA 9.2) added to the `LD_LIBRARY_PATH`.
 
-## Running the scripts
+## Running scripts
 
 Installing the package (see [Setup](#setup)) puts a single `rmlt` command on your `PATH`.
 Workflow scripts live in the `react_ml_test_public.scripts` package, and `rmlt` runs one of
@@ -58,7 +57,7 @@ Note:
 
 Run ```rmlt run-test-set-comparison-yaml``` (edit the input parameters / YAML path at the bottom of the script, or pass in `inputs/eg1.yaml` as shown in the script header).
 
-### 2.
+### 2. 
 
 ### 3.
 
