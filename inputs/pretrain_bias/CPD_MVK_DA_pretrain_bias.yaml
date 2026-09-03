@@ -1,0 +1,91 @@
+# ---- test system ----
+test_name: CPD_MVK_DA_test
+test_fpath: data/reaction_data/CPD_MVK_DA/test/CPD_MVK_DA_test.xyz
+react_coords: [[1, 12], [6, 11]]        # reactive atom pairs defining the reaction-coordinate distance
+n_solute_atoms: 22                       # number of solute atoms (leading atoms of each config)
+ref_ts_fpath: data/reaction_data/CPD_MVK_DA/TS/CPD_MVK_DA_vac_TS_wB97M.xyz
+ts_dist_threshold: 2.0                   # +/- window (Angstrom) classifying RS / TS / PS
+input_lot_test_fpaths:                   # one level-of-theory (LoT) ref .xyz per base model
+  - data/reaction_data/CPD_MVK_DA/test/CPD_MVK_DA_test_PBE_def2_TZVP.xyz
+  - data/reaction_data/CPD_MVK_DA/test/CPD_MVK_DA_test_wB97M_TZVPPD.xyz
+  - data/reaction_data/CPD_MVK_DA/test/CPD_MVK_DA_test_PBE_def2_TZVP.xyz
+
+# ---- model / fine-tuning selection ----
+model_names: [GO-MACE-23, MACE-OFF23_medium, MACE-MP-0b3_medium]
+model_plt_labels: {GO-MACE-23: GO, MACE-OFF23_medium: OFF, MACE-MP-0b3_medium: MP}
+model_ft_n: 42                           # fine-tuning set size
+model_full_ft_n: 314                     # full fine-tuning set size
+
+n: 42
+ft_train_name: CPD_MVK_DA_train
+sample_str: "ts_gauss_"                  # e.g. "ts_gauss_" for TS-Gaussian-stratified sampling
+energy_str: "energy_"                    # energy label string used in fine-tuned model names
+rep_num: 1                               # fine-tuned model repetition number
+full_ft_rep_num: 1                       # full-fine-tuned model repetition number
+
+# ---- optional relative baselines (default off) ----
+# Instead of absolute errors, compare fine-tuned errors relative to one of these baselines.
+# Set at most one of from_scratch_names / zero_shot_ref_names / ft_ref_names (each must
+# have one entry per base model), and give the corresponding rel_comp_str for filenames.
+# from_scratch_names: [GO-MACE-23, MACE-OFF23_medium, MACE_MP0]
+# from_scratch_energy_str: ""            # "energy_" for from-scratch stage-two models
+# rel_comp_str: "vs_scratch_"
+# zero_shot_ref_names: [GO-MACE-23, MACE-OFF23_medium, MACE-MP-0b3_medium]
+# rel_comp_str: "vs_zero_shot_"
+# ft_ref_names: [MACE-OFF23_medium, MACE-OFF23_medium, MACE-OFF23_medium]
+# rel_comp_str: "vs_OFF_"
+abs_y: true                              # take absolute values of relative errors
+
+# ---- atom-type subset spec (RS / TS / PS across all config types + solvated solvent) ----
+atom_type_specs:
+  - {config_type: null, react_coord_type: RS, atom_type_ids: solute}
+  - {config_type: null, react_coord_type: TS, atom_type_ids: solute}
+  - {config_type: null, react_coord_type: PS, atom_type_ids: solute}
+  - {config_type: solvated, react_coord_type: null, atom_type_ids: solvent}
+subset_names: [RS, TS, PS, Solvent]
+subsets_name: all_ts
+atom_id_cap: 500                         # upper atom index for "solvent" atom selections
+
+# other subset schemes (comment the block above / uncomment one of these as needed):
+# --- All / Vacuum / Solute / Solvent (no reaction-coordinate filtering) ---
+# atom_type_specs:
+#   - {config_type: null, react_coord_type: null, atom_type_ids: null}
+#   - {config_type: vacuum, react_coord_type: null, atom_type_ids: null}
+#   - {config_type: solvated, react_coord_type: null, atom_type_ids: solute}
+#   - {config_type: solvated, react_coord_type: null, atom_type_ids: solvent}
+# subset_names: [All, Vacuum, Solute, Solvent]
+# subsets_name: vac_solv
+# --- vacuum RS / TS / PS + solvated solvent ---
+# atom_type_specs:
+#   - {config_type: vacuum, react_coord_type: RS, atom_type_ids: solute}
+#   - {config_type: vacuum, react_coord_type: TS, atom_type_ids: solute}
+#   - {config_type: vacuum, react_coord_type: PS, atom_type_ids: solute}
+#   - {config_type: solvated, react_coord_type: null, atom_type_ids: solvent}
+# subset_names: [RS, TS, PS, Solvent]
+# subsets_name: vac_ts
+# --- solvated RS / TS / PS + solvated solvent ---
+# atom_type_specs:
+#   - {config_type: solvated, react_coord_type: RS, atom_type_ids: solute}
+#   - {config_type: solvated, react_coord_type: TS, atom_type_ids: solute}
+#   - {config_type: solvated, react_coord_type: PS, atom_type_ids: solute}
+#   - {config_type: solvated, react_coord_type: null, atom_type_ids: solvent}
+# subset_names: [RS, TS, PS, Solvent]
+# subsets_name: solv_ts
+
+# ---- plot settings ----
+plot_settings:
+  show_legend: true
+  per_element: true                      # use per-element MACE descriptor similarity caches
+  save_corr_plots: true
+  corr_plot_alphas: [0.1, 0.1, 0.1]      # scatter alpha per stage (zero-shot / FT / full FT)
+  r_plot:
+    y_label: "Pearson's r"
+    ylim: [-0.25, 1.0]
+  beta_plot:
+    y_label: "Beta"
+    ylim: null
+  mag_plot:
+    y_label: "Beta * u"
+    ylim: [-200.0, 1000.0]
+    log_y: false
+    remove_negs: false

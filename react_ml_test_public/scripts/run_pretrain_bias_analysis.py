@@ -15,6 +15,7 @@ from react_ml_test_public.helpers.io import (
     get_name_from_path,
     load_data_cache,
     save_npz_data_cache,
+    substitute_yaml_variables,
 )
 from react_ml_test_public.helpers.model_eval import (
     get_model_predictions,
@@ -318,6 +319,7 @@ def pairwise_x_y1_correlations(model_data_dict, x_index: int = 0, y_index: int =
 def category_scatter_plot(all_series: list[np.array], 
                           point_markers: list[str],
                           subset_names: list[str],
+                          base_model_names: list[str],
                           save_name: str,
                           y_label: str,
                           log_y: bool = False,
@@ -340,7 +342,7 @@ def category_scatter_plot(all_series: list[np.array],
     num_base_model_comps = 3
     major_offsets = [(k - (n - 1) / 2) * 0.16 for k in range(n)]
     for i, model_series in enumerate(all_series):
-        colour = PAPER_MODEL_COLOURS[model_names[i]]
+        colour = PAPER_MODEL_COLOURS[base_model_names[i]]
         for j, series in enumerate(model_series):
 
             neg_mask = series > 0
@@ -395,178 +397,391 @@ def category_scatter_plot(all_series: list[np.array],
     print(f"Saved plot to {save_fp}")
     plt.close()
  
-if __name__ == "__main__":
 
-    ref_ts_config = None
-    from_scratch_names = None
-    zero_shot_ref_names = None
-    ft_ref_names = None
-        
-    # === CHOOSE TEST SET ===
 
-    # --- CPD MVK ---
-    # test_name, per_element = "CPD_MVK_DA_test", True
-    # test_fpath = f"{CPD_MVK_DA_DATA_DIR}/test/{test_name}.xyz"
-    # react_coords = [(1, 12), (6, 11)]
-    # ref_ts_config = flexible_ase_read(f'{CPD_MVK_DA_DATA_DIR}/TS/endo_DA_vac_TS_wB97M.xyz')[0]
-    # ts_dist_threshold = 2.0 # 1.2
-    # # basis_set = "SVP"
-    # basis_set = "TZVP"
-    # input_lot_test_fpaths = [f"{CPD_MVK_DA_DATA_DIR}/test/CPD_MVK_DA_test_PBE_def2_{basis_set}.xyz", 
-    #                         #  f"{CPD_MVK_DA_DATA_DIR}/test/CPD_MVK_DA_test.xyz", 
-    #                          f"{CPD_MVK_DA_DATA_DIR}/test/CPD_MVK_DA_test_wB97M_TZVPPD.xyz", 
-    #                         #  f"{CPD_MVK_DA_DATA_DIR}/test/CPD_MVK_DA_test_PBE_def2_{basis_set}.xyz",
-    #                          f"{CPD_MVK_DA_DATA_DIR}/test/CPD_MVK_DA_test_PBE_def2_{basis_set}.xyz"]
-    # n_solute_atoms = 22
-    # model_ft_n, model_full_ft_n = 42, 314
-    # n, ft_system_name, ft_train_name, rep_num = 42, "CPD_MVK_DA", "CPD_MVK_DA_train", 1
-    # # n, ft_system_name, ft_train_name, rep_num = 42, "CPD_MVK_DA", "CPD_MVK_DA_train", 2
-    # sample_str = 'ts_gauss_'
+def resolve_input_yaml(input_config: dict, parser=None):
+    """Resolve and validate a run_pretrain_bias_analysis YAML config into a flat dict of
+    variables matching the script's ``__main__`` expectations.
 
-    # --- anthracene ---
-    test_name = "anthracene_DA_test"
-    test_fpath = f"{ANTHRACENE_DA_DATA_DIR}/test/anthracene_DA_test.xyz"
-    react_coords = [(2, 20), (5, 22)]
-    ref_ts_config = flexible_ase_read(f"{ANTHRACENE_DA_DATA_DIR}/TS/anthracene_DA_vac_TS_wB97M.xyz")[0]
-    ts_dist_threshold = 2.0 # 1.2
-    input_lot_test_fpaths = [f"{ANTHRACENE_DA_DATA_DIR}/test/anthracene_DA_test_PBE_def2_TZVP.xyz", 
-                            #  f"{ANTHRACENE_DA_DATA_DIR}/test/anthracene_DA_test.xyz", 
-                             f"{ANTHRACENE_DA_DATA_DIR}/test/anthracene_DA_test_wB97M_TZVPP.xyz", 
-                             f"{ANTHRACENE_DA_DATA_DIR}/test/anthracene_DA_test_PBE_def2_TZVP.xyz"]
-    n_solute_atoms = 41
-    model_ft_n, model_full_ft_n = 46, 455
-    n, ft_system_name, ft_train_name, rep_num = 46, "anthracene_DA", "anthracene_DA_train", 2
-    sample_str = ''
+    ``parser`` (optional argparse.ArgumentParser) reports errors the same way as the other
+    YAML-driven scripts; when None a ValueError is raised instead (useful for testing).
+    """
+    def _error(message):
+        if parser is not None:
+            parser.error(message)
+        raise ValueError(message)
 
-    # --- guajadial ---
-    # test_name = "guajadial_DA_test"
-    # test_fpath = f"{GUAJADIAL_DA_DATA_DIR}/test/guajadial_DA_test.xyz"
-    # react_coords = [(13, 31), (6, 32)]
-    # ref_ts_config = flexible_ase_read(f"{GUAJADIAL_DA_DATA_DIR}/TS/guajadial_DA_vac_TS_wB97M.xyz")[0]
-    # ts_dist_threshold = 1.2
-    # input_lot_test_fpaths = [f"{GUAJADIAL_DA_DATA_DIR}/test/guajadial_DA_test_PBE_def2_TZVP.xyz", 
-    #                         #  f"{GUAJADIAL_DA_DATA_DIR}/test/guajadial_DA_test.xyz", 
-    #                          f"{GUAJADIAL_DA_DATA_DIR}/test/guajadial_DA_test_wB97M_TZVPP.xyz", 
-    #                          f"{GUAJADIAL_DA_DATA_DIR}/test/guajadial_DA_test_PBE_def2_TZVP.xyz"]
-    # n_solute_atoms = 69
-    # model_ft_n, model_full_ft_n = 50, 587
-    # n, ft_system_name, ft_train_name, test_name, rep_num = 50, "guajadial_DA_test", "guajadial_DA_train", "guajadial_DA_test", 1
-    # sample_str = ''
+    def _need(key):
+        value = input_config.get(key, None)
+        if value is None:
+            _error(f"Missing required field '{key}' in input YAML.")
+        return value
 
-    # ----------------
+    def _parse_ylim(value):
+        """Parse a [lo, hi] y-limit from a config value (or return None)."""
+        if value is None:
+            return None
+        try:
+            value = [float(x) for x in value]
+        except (TypeError, ValueError):
+            return None
+        return (value[0], value[1]) if len(value) == 2 else None
 
-    # === CHOOSE ATOM TYPE SPECS ===
+    def _as_bool(value, default=False):
+        """Coerce a config value to a bool (handles quoted strings too)."""
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in ("true", "1", "yes")
+        return bool(value)
 
-    # atom_type_specs = [
-    #                 (None, None, None),
-    #                 ('vacuum', None, None),
-    #                 ('solvated', None, [i for i in range(n_solute_atoms)]),      # reactants in solvent only
-    #                 ('solvated', None, [i for i in range(n_solute_atoms, 500)])
-    #                 ]
-    # subset_names = ['All', 'Vacuum', 'Solute', 'Solvent']
-    # subsets_name = 'vac_solv'
+    # ---- test system ----
+    test_name = _need("test_name")
+    test_fpath = _need("test_fpath")
+    react_coords = [tuple(pair) for pair in _need("react_coords")]
+    ts_dist_threshold = float(input_config.get("ts_dist_threshold", 2.0))
+    n_solute_atoms = int(_need("n_solute_atoms"))
+    ref_ts_config = flexible_ase_read(_need("ref_ts_fpath"))[0]
 
-    # rs / ts /ps for all configurations 
-    # atom_type_specs = [
-    #             ('vacuum', 'RS', [i for i in range(n_solute_atoms)]),
-    #             ('vacuum', 'TS', [i for i in range(n_solute_atoms)]),   
-    #             ('vacuum', 'PS', [i for i in range(n_solute_atoms)]),
-    #             ('solvated', None, [i for i in range(n_solute_atoms, 500)])  # 109
-    #             ]
-    # subset_names = ["RS", "TS", "PS", 'Solvent']
-    # subsets_name = 'vac_ts'
+    input_lot_test_fpaths = input_config.get("input_lot_test_fpaths", None)
+    if input_lot_test_fpaths is None:
+        _error("Missing required field 'input_lot_test_fpaths' in input YAML.")
+    if isinstance(input_lot_test_fpaths, str):
+        input_lot_test_fpaths = [input_lot_test_fpaths]
+    num_models = len(input_lot_test_fpaths)
 
-    # rs / ts /ps for solvated configurations 
-    # atom_type_specs = [
-    #             ('solvated', 'RS', [i for i in range(n_solute_atoms)]),
-    #             ('solvated', 'TS', [i for i in range(n_solute_atoms)]),   
-    #             ('solvated', 'PS', [i for i in range(n_solute_atoms)]),
-    #             ('solvated', None, [i for i in range(n_solute_atoms, 500)])  # 109
-    #             ]
-    # subset_names = ["RS", "TS", "PS", 'Solvent']
-    # subsets_name = 'solv_ts'
-    
-    # rs / ts /ps for all configurations 
-    atom_type_specs = [
-                (None, 'RS', [i for i in range(n_solute_atoms)]),
-                (None, 'TS', [i for i in range(n_solute_atoms)]),   
-                (None, 'PS', [i for i in range(n_solute_atoms)]),
-                ('solvated', None, [i for i in range(n_solute_atoms, 500)])
-                ]
-    subset_names = ["RS", "TS", "PS", 'Solvent']
-    subsets_name = 'all_ts'
+    # ---- base model / fine-tuning selection ----
+    n = int(_need("n"))
+    model_names = _need("model_names")
+    if len(model_names) != num_models:
+        _error(f"'model_names' must have one entry per 'input_lot_test_fpaths' entry "
+               f"({num_models}), got {len(model_names)}.")
+    missing_colours = [name for name in model_names if name not in PAPER_MODEL_COLOURS]
+    if missing_colours:
+        _error(f"Model names missing from PAPER_MODEL_COLOURS (needed for plot colours): "
+               f"{missing_colours}")
+    model_plt_labels = input_config.get("model_plt_labels", None)
+    if model_plt_labels is None:
+        model_plt_labels = {name: name for name in model_names}
+    model_ft_n = input_config.get("model_ft_n", n)
+    model_full_ft_n = input_config.get("model_full_ft_n", n)
+    ft_train_name = _need("ft_train_name")
+    sample_str = str(input_config.get("sample_str", ""))
+    energy_str = str(input_config.get("energy_str", "energy_"))
+    rep_num = int(input_config.get("rep_num", 1))
+    full_ft_rep_num = int(input_config.get("full_ft_rep_num", 1))
 
-    # === CHOOSE MODEL ===
-    # model_name = 'GO-MACE-23'
-    # ft_model_name = 'GO-MACE-23_CPD_MVK_DA_train_42_config_strat_fine_tuned_energy_rep_1'
-    # ft_model_name = 'GO-MACE-23_CPD_MVK_DA_train_strat_fine_tuned_energy_rep_1'
-    # input_lot_test_fpath = f"{CPD_MVK_DA_DATA_DIR}/endo_DA_PBE_combined_test.xyz"
+    # ---- optional relative baselines (default off) ----
+    from_scratch_names = input_config.get("from_scratch_names", None)
+    from_scratch_energy_str = str(input_config.get("from_scratch_energy_str", ""))
+    zero_shot_ref_names = input_config.get("zero_shot_ref_names", None)
+    ft_ref_names = input_config.get("ft_ref_names", None)
+    rel_comp_str = str(input_config.get("rel_comp_str", ""))
+    abs_y = _as_bool(input_config.get("abs_y", True), default=True)
+    _rel_baselines = [from_scratch_names, zero_shot_ref_names, ft_ref_names]
+    if sum(baseline is not None for baseline in _rel_baselines) > 1:
+        _error("Only one of 'from_scratch_names' / 'zero_shot_ref_names' / 'ft_ref_names' "
+               "may be set at a time.")
+    for _key in ("from_scratch_names", "zero_shot_ref_names", "ft_ref_names"):
+        _value = input_config.get(_key, None)
+        if _value is not None and (len(_value) != num_models or any(x is None for x in _value)):
+            _error(f"'{_key}' must have one non-null entry per base model ({num_models}).")
 
-    # model_name = 'MACE-OFF23_medium'
-    # ft_model_name = 'MACE-OFF23_medium_CPD_MVK_DA_train_42_config_strat_fine_tuned_energy_rep_1'
-    # ft_model_name = 'MACE-OFF23_medium_CPD_MVK_DA_strat_fine_tuned_energy_rep_1'
-    # input_lot_test_fpath = f"{CPD_MVK_DA_DATA_DIR}/endo_DA_wB97M_combined_test.xyz"
-
-    # model_name = 'MACE-MP0-128-L1'
-    # # ft_model_name = 'MACE-MP0-128-L1_CPD_MVK_DA_train_42_config_strat_fine_tuned_energy_rep_1'
-    # ft_model_name = 'MACE-MP0-128-L1_CPD_MVK_DA_train_strat_fine_tuned_energy_rep_1'
-    # input_lot_test_fpath = f"{CPD_MVK_DA_DATA_DIR}/endo_DA_PBE_combined_test.xyz"
-
-    # choose for lot or sim correlation
-    # model_names, plot_mode = ['GO-MACE-23', 'MACE-OFF23_medium', 'MACE-MP-0b3_medium'], 'sim'
-    # model_names, input_lot_test_fpaths, plot_mode = ['GO-MACE-23', 'MACE-MP-0b3_medium'], [input_lot_test_fpaths[0], input_lot_test_fpaths[2]], 'lot'
-    model_names, plot_mode = ['GO-MACE-23', 'MACE-OFF23_medium', 'MACE-MP-0b3_medium'], 'lot'
-
-    # add from scratch correction (i.e. instead measure improvement over from scratch models)
-    # from_scratch_names, from_scratch_energy_str, rel_comp_str, abs_y = ['GO-MACE-23', 'MACE-OFF23_medium', 'MACE_MP0'], '', 'vs_scratch_', False       # FROM SCRATCH STAGE ONE MODELS
-    # from_scratch_names, from_scratch_energy_str, rel_comp_str, abs_y = ['GO-MACE-23', 'MACE-OFF23_medium', 'MACE_MP0'], 'energy_', 'vs_scratch_', False # FROM SCRATCH STAGE TWO MODELS
-    # zero_shot_ref_names, from_scratch_energy_str, rel_comp_str, abs_y = ['GO-MACE-23', 'MACE-OFF23_medium', 'MACE-MP-0b3_medium'], 'energy_', 'vs_zero_shot_', False  # ZERO SHOT STAGE TWO MODELS
-    # ft_ref_names, from_scratch_energy_str, rel_comp_str, abs_y = ['MACE-OFF23_medium'] * 3, 'energy_', 'vs_OFF_', False  # relative to OFF (only relevant for LoT)
-    from_scratch_names, from_scratch_energy_str, rel_comp_str, abs_y = None, '', '', True                                                                          # No from scratvch correction
-
-    ft_model_names, full_ft_model_names, rel_comp_model_names, full_rel_comp_model_names = [], [], [], []
+    # ---- fine-tuned model names ----
+    ft_model_names, full_ft_model_names = [], []
+    rel_comp_model_names, full_rel_comp_model_names = [], []
     for i, model_name in enumerate(model_names):
-        ft_model_names.append(f'{model_name}_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_energy_rep_{rep_num}')
-        full_ft_model_names.append(f'{model_name}_{ft_train_name}_fine_tuned_energy_rep_1')       
-        
-        # ft_model_names.append(f'{model_name}_{ft_train_name}_2_config_strat_{sample_str}fine_tuned_rep_{rep_num}')
-        # full_ft_model_names.append(f'{model_name}_{ft_train_name}_10_config_strat_{sample_str}fine_tuned_rep_{rep_num}')
+        ft_model_names.append(f"{model_name}_{ft_train_name}_{n}_config_strat_{sample_str}"
+                              f"fine_tuned_{energy_str}rep_{rep_num}")
+        full_ft_model_names.append(f"{model_name}_{ft_train_name}_fine_tuned_"
+                                   f"{energy_str}rep_{full_ft_rep_num}")
 
         if from_scratch_names is not None:
-            rel_comp_model_names.append(f'{from_scratch_names[i]}_from_scratch_{ft_train_name}_{n}_config_strat_{sample_str}{from_scratch_energy_str}rep_1')
-            full_rel_comp_model_names.append(f'{from_scratch_names[i]}_{ft_train_name}_from_scratch_{from_scratch_energy_str}rep_{rep_num}')
-
-            # baseline_model_name = 'MACE-OFF23_medium'  # TODO: debug!
-            # rel_comp_model_names.append(f'{baseline_model_name}_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_energy_rep_{rep_num}')
-            # full_rel_comp_model_names.append(f'{baseline_model_name}_{ft_train_name}_fine_tuned_energy_rep_1')
+            rel_comp_model_names.append(f"{from_scratch_names[i]}_from_scratch_{ft_train_name}_"
+                                        f"{n}_config_strat_{sample_str}{from_scratch_energy_str}rep_1")
+            full_rel_comp_model_names.append(f"{from_scratch_names[i]}_{ft_train_name}_"
+                                             f"from_scratch_{from_scratch_energy_str}rep_{rep_num}")
             print("Adding from scratch model as relative baseline...")
-        
         elif zero_shot_ref_names is not None:
             rel_comp_model_names.append(zero_shot_ref_names[i])
             full_rel_comp_model_names.append(zero_shot_ref_names[i])
             print("Adding zero-shot model as relative baseline...")
-
         elif ft_ref_names is not None:
-            # rel_comp_model_names.append(ft_ref_names[i])
-            # full_rel_comp_model_names.append(zero_shot_ref_names[i])
-            rel_comp_model_names.append(f'{ft_ref_names[i]}_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_energy_rep_{rep_num}')
-            # rel_comp_model_names.append(f'{ft_ref_names[i]}_{n}_config_strat_{sample_str}fine_tuned_energy_rep_{rep_num}')
-            full_rel_comp_model_names.append(f'{ft_ref_names[i]}_{ft_train_name}_fine_tuned_energy_rep_1') 
+            rel_comp_model_names.append(f"{ft_ref_names[i]}_{ft_train_name}_{n}_config_strat_"
+                                        f"{sample_str}fine_tuned_{energy_str}rep_{rep_num}")
+            full_rel_comp_model_names.append(f"{ft_ref_names[i]}_{ft_train_name}_fine_tuned_"
+                                             f"{energy_str}rep_{full_ft_rep_num}")
             print("Adding fine-tuned reference model as relative baseline...")
         else:
             rel_comp_model_names.append(None)
             full_rel_comp_model_names.append(None)
-    # print(ft_model_names)
 
-    # ======== PLOT SETTINGS =============
-    show_legend = True
-    per_element = True
-    save_corr_plots = True
-    # ===============================
+    # ---- atom-type subset spec ----
+    atom_type_specs_raw = _need("atom_type_specs")
+    if not isinstance(atom_type_specs_raw, list):
+        _error("'atom_type_specs' must be a list of "
+               "{config_type, react_coord_type, atom_type_ids} mappings.")
+    atom_id_cap = int(input_config.get("atom_id_cap", 500))
+    atom_type_specs = []
+    for _spec in atom_type_specs_raw:
+        if not isinstance(_spec, dict):
+            _error("Each entry of 'atom_type_specs' must be a mapping with "
+                   "'config_type', 'react_coord_type' and 'atom_type_ids' keys.")
+        config_type = _spec.get("config_type", None)
+        react_coord_type = _spec.get("react_coord_type", None)
+        if react_coord_type not in (None, "RS", "TS", "PS"):
+            _error(f"Unrecognised react_coord_type: {react_coord_type!r} "
+                   f"(expected None / 'RS' / 'TS' / 'PS').")
+        atom_type_ids = _spec.get("atom_type_ids", None)
+        if atom_type_ids == "solute":
+            atom_type_ids = list(range(n_solute_atoms))
+        elif atom_type_ids == "solvent":
+            atom_type_ids = list(range(n_solute_atoms, atom_id_cap))
+        elif atom_type_ids is not None and not isinstance(atom_type_ids, list):
+            _error(f"Unrecognised atom_type_ids: {atom_type_ids!r} "
+                   f"(expected None / 'solute' / 'solvent' / a list of atom indices).")
+        atom_type_specs.append((config_type, react_coord_type, atom_type_ids))
+    subset_names = _need("subset_names")
+    if len(subset_names) != len(atom_type_specs):
+        _error(f"'subset_names' must have one label per entry of 'atom_type_specs' "
+               f"({len(atom_type_specs)}), got {len(subset_names)}.")
+    subsets_name = str(_need("subsets_name"))
+
+    # ---- plot settings ----
+    plot_settings = input_config.get("plot_settings", None) or {}
+    show_legend = _as_bool(plot_settings.get("show_legend", True), default=True)
+    per_element = _as_bool(plot_settings.get("per_element", True), default=True)
+    save_corr_plots = _as_bool(plot_settings.get("save_corr_plots", True), default=True)
+    corr_plot_alphas = plot_settings.get("corr_plot_alphas", [0.1, 0.1, 0.1])
+
+    r_plot_settings = plot_settings.get("r_plot", None) or {}
+    scatter_r_y_label = r_plot_settings.get("y_label", "Pearson's r")
+    scatter_r_ylim = _parse_ylim(r_plot_settings.get("ylim", [-0.25, 1.0]))
+
+    beta_plot_settings = plot_settings.get("beta_plot", None) or {}
+    scatter_beta_y_label = beta_plot_settings.get("y_label", "Beta")
+    scatter_beta_ylim = _parse_ylim(beta_plot_settings.get("ylim", None))
+
+    mag_plot_settings = plot_settings.get("mag_plot", None) or {}
+    mag_log_y = _as_bool(mag_plot_settings.get("log_y", False), default=False)
+    mag_remove_negs = _as_bool(mag_plot_settings.get("remove_negs", mag_log_y),
+                               default=mag_log_y)
+    scatter_mag_y_label = mag_plot_settings.get("y_label", "Beta * u")
+    scatter_mag_ylim = _parse_ylim(mag_plot_settings.get("ylim", None))
+    if scatter_mag_ylim is None:
+        scatter_mag_ylim = (1.0, 1201.0) if mag_log_y else (-200.0, 1000.0)
+    return {
+        "test_name": test_name,
+        "test_fpath": test_fpath,
+        "react_coords": react_coords,
+        "ts_dist_threshold": ts_dist_threshold,
+        "n_solute_atoms": n_solute_atoms,
+        "model_ft_n": model_ft_n,
+        "model_full_ft_n": model_full_ft_n,
+        "ref_ts_config": ref_ts_config,
+        "input_lot_test_fpaths": input_lot_test_fpaths,
+        "model_names": model_names,
+        "model_plt_labels": model_plt_labels,
+        "n": n,
+        "ft_train_name": ft_train_name,
+        "sample_str": sample_str,
+        "energy_str": energy_str,
+        "rep_num": rep_num,
+        "full_ft_rep_num": full_ft_rep_num,
+        "from_scratch_names": from_scratch_names,
+        "from_scratch_energy_str": from_scratch_energy_str,
+        "zero_shot_ref_names": zero_shot_ref_names,
+        "ft_ref_names": ft_ref_names,
+        "rel_comp_str": rel_comp_str,
+        "abs_y": abs_y,
+        "ft_model_names": ft_model_names,
+        "full_ft_model_names": full_ft_model_names,
+        "rel_comp_model_names": rel_comp_model_names,
+        "full_rel_comp_model_names": full_rel_comp_model_names,
+        "atom_type_specs": atom_type_specs,
+        "subset_names": subset_names,
+        "subsets_name": subsets_name,
+        "show_legend": show_legend,
+        "per_element": per_element,
+        "save_corr_plots": save_corr_plots,
+        "corr_plot_alphas": corr_plot_alphas,
+        "scatter_r_y_label": scatter_r_y_label,
+        "scatter_r_ylim": scatter_r_ylim,
+        "scatter_beta_y_label": scatter_beta_y_label,
+        "scatter_beta_ylim": scatter_beta_ylim,
+        "scatter_mag_y_label": scatter_mag_y_label,
+        "scatter_mag_ylim": scatter_mag_ylim,
+        "mag_log_y": mag_log_y,
+        "mag_remove_negs": mag_remove_negs,
+    }
+
+
+if __name__ == "__main__":
+
+    """Run a pretraining-bias analysis.
+
+    Compares zero-shot / fine-tuned / fully fine-tuned MLIP force-norm errors against
+    lower-level-of-theory (LoT) reference force errors and MACE descriptor similarities,
+    across config-type / reaction-coordinate / atom-type subsets of a test set.
+
+    The path to the input YAML file is given as a single command-line argument:
+
+        rmlt run-pretrain-bias-analysis inputs/pretrain_bias/CPD_MVK_DA_pretrain_bias.yaml
+
+    (or equivalently: python -m react_ml_test_public.scripts.run_pretrain_bias_analysis
+    inputs/pretrain_bias/CPD_MVK_DA_pretrain_bias.yaml)
+
+    Input YAML format (see inputs/pretrain_bias/CPD_MVK_DA_pretrain_bias.yaml for a full
+    example). Fields:
+
+    Test system:
+        test_name:              # test set name (used in output / cache filenames).
+        test_fpath:             # path to the DFT reference test-set .xyz.
+        react_coords:           # [[i, j], ...] reactive atom pairs defining the
+                                # reaction-coordinate distance.
+        ref_ts_fpath:           # path to the reference (vacuum) TS .xyz.
+        ts_dist_threshold:      # +/- window (Angstrom) classifying RS / TS / PS.
+        input_lot_test_fpaths:  # one lower-level-of-theory .xyz per base model, with
+                                # identical structures in the same order as test_fpath.
+        n_solute_atoms:         # number of solute atoms (the leading atoms of each config).
+
+    Model / fine-tuning selection:
+        model_names:            # list of base (zero-shot) models to analyse.
+        model_plt_labels:       # short model labels used in correlation-plot annotations.
+        model_ft_n:             # fine-tuning set size (used in plot labels).
+        model_full_ft_n:        # full-fine-tuning set size (used in plot labels).
+        n:                      # fine-tuning training-set size.
+        ft_train_name:          # fine-tuning training-set name.
+        sample_str:             # sampling-strategy suffix in fine-tuned names.
+        energy_str:             # energy-label string in fine-tuned names (e.g. "energy_").
+        rep_num:                # fine-tuned model repetition number.
+        full_ft_rep_num:        # full-fine-tuned model repetition number.
+
+    Optional relative baselines (default off; if set, lists need one entry per model):
+        from_scratch_names:     # base model names for from-scratch-trained baselines.
+        from_scratch_energy_str:# energy-label string of those from-scratch models.
+        zero_shot_ref_names:    # use zero-shot base models as the relative baseline.
+        ft_ref_names:           # use this fine-tuned reference base model instead.
+        rel_comp_str:           # string added to output names, e.g. "vs_scratch_".
+        abs_y:                  # take absolute values of relative errors.
+
+    Subset (atom-type spec) selection:
+        atom_type_specs:        # list of {config_type, react_coord_type, atom_type_ids}.
+                                # config_type: ~ / "vacuum" / "solvated".
+                                # react_coord_type: ~ / "RS" / "TS" / "PS".
+                                # atom_type_ids: ~ (all) / "solute" / "solvent" / [i, ...].
+        subset_names:           # labels for each entry of atom_type_specs.
+        subsets_name:           # short name for this subset scheme (used in output names).
+        atom_id_cap:            # upper atom index for "solvent" selections (default 500).
+
+    Plot settings (all optional):
+        plot_settings:
+            show_legend:        # whether to draw legends on the correlation plots.
+            per_element:        # use per-element MACE descriptor similarity caches.
+            save_corr_plots:    # whether to save the correlation scatter plots.
+            corr_plot_alphas:   # scatter alpha per stage (zero-shot / FT / full FT).
+            r_plot:             # {y_label: ..., ylim: [lo, hi]} for the Pearson's-r plots.
+            beta_plot:          # {y_label: ..., ylim: [lo, hi]} for the beta plots.
+            mag_plot:           # {y_label: ..., ylim: [lo, hi], log_y: bool, remove_negs: bool}.
+
+    Any omitted field is set to None (or its default, where stated above).
+    """
+
+    import argparse
+    import yaml
+
+    # input YAML config path from a single command-line argument
+    parser = argparse.ArgumentParser(
+        description="Run an MLIP pretraining-bias analysis driven by an input YAML "
+                    "config file (format described above).",
+        epilog="Example: rmlt run-pretrain-bias-analysis "
+               "inputs/pretrain_bias/CPD_MVK_DA_pretrain_bias.yaml",
+    )
+    parser.add_argument(
+        "input_yaml",
+        help="Path to the input YAML config file "
+             "(e.g. inputs/pretrain_bias/CPD_MVK_DA_pretrain_bias.yaml).",
+    )
+    args = parser.parse_args()
+
+    # input safeguards
+    input_yaml_fpath = args.input_yaml
+    if not input_yaml_fpath.endswith((".yaml", ".yml")):
+        parser.error(f"Input file must be a YAML file (.yaml / .yml), got: {input_yaml_fpath!r}")
+    if not os.path.isfile(input_yaml_fpath):
+        parser.error(f"Input YAML file not found: {input_yaml_fpath!r}")
+
+    with open(input_yaml_fpath, "r") as f:
+        input_config = yaml.safe_load(f) or {}
+        input_config = substitute_yaml_variables(input_config, input_config)
+    if not isinstance(input_config, dict):
+        parser.error(
+            f"Input YAML must be a mapping of config fields (see format above), got a "
+            f"{type(input_config).__name__}: {input_yaml_fpath!r}"
+        )
+
+    # ===== resolve the YAML config into the variables used by the analysis below =====
+    resolved = resolve_input_yaml(input_config, parser)
+
+    # test system
+    test_name = resolved["test_name"]
+    test_fpath = resolved["test_fpath"]
+    react_coords = resolved["react_coords"]
+    ts_dist_threshold = resolved["ts_dist_threshold"]
+    n_solute_atoms = resolved["n_solute_atoms"]
+    model_ft_n = resolved["model_ft_n"]
+    model_full_ft_n = resolved["model_full_ft_n"]
+    ref_ts_config = resolved["ref_ts_config"]
+    input_lot_test_fpaths = resolved["input_lot_test_fpaths"]
+
+    # base model / fine-tuning selection
+    model_names = resolved["model_names"]
+    model_plt_labels = resolved["model_plt_labels"]
+    n = resolved["n"]
+    ft_train_name = resolved["ft_train_name"]
+    sample_str = resolved["sample_str"]
+    energy_str = resolved["energy_str"]
+    rep_num = resolved["rep_num"]
+    full_ft_rep_num = resolved["full_ft_rep_num"]
+
+    # optional relative baselines
+    from_scratch_names = resolved["from_scratch_names"]
+    from_scratch_energy_str = resolved["from_scratch_energy_str"]
+    zero_shot_ref_names = resolved["zero_shot_ref_names"]
+    ft_ref_names = resolved["ft_ref_names"]
+    rel_comp_str = resolved["rel_comp_str"]
+    abs_y = resolved["abs_y"]
+
+    # fine-tuned model names
+    ft_model_names = resolved["ft_model_names"]
+    full_ft_model_names = resolved["full_ft_model_names"]
+    rel_comp_model_names = resolved["rel_comp_model_names"]
+    full_rel_comp_model_names = resolved["full_rel_comp_model_names"]
+
+    # atom-type subsets
+    atom_type_specs = resolved["atom_type_specs"]
+    subset_names = resolved["subset_names"]
+    subsets_name = resolved["subsets_name"]
+
+    # plot settings
+    show_legend = resolved["show_legend"]
+    per_element = resolved["per_element"]
+    save_corr_plots = resolved["save_corr_plots"]
+    corr_plot_alphas = resolved["corr_plot_alphas"]
+    scatter_r_y_label = resolved["scatter_r_y_label"]
+    scatter_r_ylim = resolved["scatter_r_ylim"]
+    scatter_beta_y_label = resolved["scatter_beta_y_label"]
+    scatter_beta_ylim = resolved["scatter_beta_ylim"]
+    scatter_mag_y_label = resolved["scatter_mag_y_label"]
+    scatter_mag_ylim = resolved["scatter_mag_ylim"]
+    mag_log_y = resolved["mag_log_y"]
+    mag_remove_negs = resolved["mag_remove_negs"]
+    del resolved
 
     abs_func = np.abs if abs_y else (lambda x: x)
 
-    model_plt_labels = {'GO-MACE-23': 'GO', 'MACE-OFF23_medium': 'OFF', 'MACE-MP-0b3_medium': 'MP'}
 
     all_subset_data = {}
     all_config_sim_scores = []
@@ -862,7 +1077,7 @@ if __name__ == "__main__":
                 (zero_shot_lot_mag, ft_lot_mag, full_ft_lot_mag) = corr_plot(
                         [x[1] for x in corr_plot_datasets[0:3]], 
                         [x[0] for x in corr_plot_datasets[0:3]], 
-                        alphas=[0.1, 0.1, 0.1], 
+                        alphas=corr_plot_alphas, 
                         # alphas=[0.3, 0.3, 0.3], 
                         colours=generate_shades(PAPER_MODEL_COLOURS[model_name]), 
                         x_label=None, #r"Lot Force Norm Error (meV / $\AA$)", 
@@ -882,7 +1097,7 @@ if __name__ == "__main__":
                 (zero_shot_sim_mag, ft_sim_mag, full_ft_sim_mag) = corr_plot(
                         [x[1] for x in corr_plot_datasets[3:6]], 
                         [x[0] for x in corr_plot_datasets[3:6]], 
-                        alphas=[0.1, 0.1, 0.1], 
+                        alphas=corr_plot_alphas, 
                         # alphas=[0.3, 0.3, 0.3], 
                         colours=generate_shades(PAPER_MODEL_COLOURS[model_name]), 
                         # colours=list(plt.get_cmap("tab10").colors)[0:3], 
@@ -1008,31 +1223,32 @@ if __name__ == "__main__":
 
     # plot r values
     save_name = f"{test_name}_lot_r_{subsets_name}_{rel_comp_str}"
-    category_scatter_plot(all_lot_r_series, ['o', 'o', 'o'], subset_names, save_name, y_label="Pearson's r", ylim = (-0.25, 1.0))
+    category_scatter_plot(all_lot_r_series, ['o', 'o', 'o'], subset_names, model_names, save_name,
+                          y_label=scatter_r_y_label, ylim=scatter_r_ylim)
 
     save_name = f"{test_name}_sim_r_{subsets_name}_{rel_comp_str}"
-    category_scatter_plot(all_sim_r_series, ['^', '^', '^'], subset_names, save_name, y_label="Pearson's r", ylim = (-0.25, 1.0))
+    category_scatter_plot(all_sim_r_series, ['^', '^', '^'], subset_names, model_names, save_name,
+                          y_label=scatter_r_y_label, ylim=scatter_r_ylim)
 
     # plot betas
     save_name = f"{test_name}_lot_betas_{subsets_name}_{rel_comp_str}"
-    category_scatter_plot(all_lot_beta_series, ['o', 'o', 'o'], subset_names, save_name, y_label="Beta", log_y=False)
+    category_scatter_plot(all_lot_beta_series, ['o', 'o', 'o'], subset_names, model_names, save_name,
+                          y_label=scatter_beta_y_label, ylim=scatter_beta_ylim, log_y=False)
 
     save_name = f"{test_name}_sim_betas_{subsets_name}_{rel_comp_str}"
-    category_scatter_plot(all_sim_beta_series, ['^', '^', '^'], subset_names, save_name, y_label="Beta", log_y=False)
+    category_scatter_plot(all_sim_beta_series, ['^', '^', '^'], subset_names, model_names, save_name,
+                          y_label=scatter_beta_y_label, ylim=scatter_beta_ylim, log_y=False)
 
-    # plot betas
-    log_y = False
+    # plot beta * u magnitudes
     save_name = f"{test_name}_lot_mags_{subsets_name}_{rel_comp_str}"
-    category_scatter_plot(all_lot_mag_series, ['o', 'o', 'o'], subset_names, save_name, y_label="Beta * u", 
-                        ylim=(1, 1201) if log_y else (-200, 1000), 
-                        log_y=log_y,
-                        remove_negs=log_y)
+    category_scatter_plot(all_lot_mag_series, ['o', 'o', 'o'], subset_names, model_names, save_name,
+                          y_label=scatter_mag_y_label, ylim=scatter_mag_ylim,
+                          log_y=mag_log_y, remove_negs=mag_remove_negs)
 
     save_name = f"{test_name}_sim_mags_{subsets_name}_{rel_comp_str}"
-    category_scatter_plot(all_sim_mag_series, ['^', '^', '^'], subset_names, save_name, y_label="Beta * u", 
-                        ylim=(1, 1201) if log_y else (-200, 1000), 
-                        log_y=log_y,
-                        remove_negs=log_y)
+    category_scatter_plot(all_sim_mag_series, ['^', '^', '^'], subset_names, model_names, save_name,
+                          y_label=scatter_mag_y_label, ylim=scatter_mag_ylim,
+                          log_y=mag_log_y, remove_negs=mag_remove_negs)
 
     # bar plot of lot MAEs
     save_fp = f'{PLOT_DIR}/descriptors/{test_name}_model_lot_maes.png'
