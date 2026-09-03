@@ -1,11 +1,12 @@
+import argparse
 import csv
 import glob
 import os
 import re
 
 import numpy as np
-
 import torch
+import yaml
 from matplotlib import pyplot as plt
 
 from react_ml_test_public.helpers.io import (
@@ -37,7 +38,10 @@ from react_ml_test_public.helpers.settings import (
     PlotSettings,
 )
 from react_ml_test_public.helpers.stats import calculate_rmse_on_errors
-from react_ml_test_public.helpers.utils import get_formatted_model_name, natural_sort_key
+from react_ml_test_public.helpers.utils import (
+    get_formatted_model_name,
+    natural_sort_key,
+)
 
 # set CUDA device
 CUDA_DEVICE_NUM = 0
@@ -56,10 +60,10 @@ if __name__ == "__main__":
 
     The path to the input YAML file is given as a single command-line argument:
 
-        rmlt run-reaction-barrier-comparison inputs/IRC/guajadial_DA_IRC_barrier.yaml
+        rmlt run-reaction-barrier-comparison inputs/irc/<test_name>.yaml
 
     (or equivalently: python -m react_ml_test_public.scripts.run_reaction_barrier_comparison
-    inputs/IRC/guajadial_DA_IRC_barrier.yaml)
+    inputs/irc/<test_name>.yaml)
 
     Input YAML format (see inputs/IRC/guajadial_DA_IRC_barrier.yaml for a full example):
 
@@ -98,8 +102,6 @@ if __name__ == "__main__":
     Any omitted field is set to None.
     """
 
-    import argparse
-    import yaml
 
     # input YAML config path from a single command-line argument
     parser = argparse.ArgumentParser(

@@ -1,0 +1,42 @@
+# ---- model / fine-tuning selection ----
+n: 46
+train_name: anthracene_DA_train
+sample_str: ""                 # e.g. "ts_gauss_" for TS-Gaussian-stratified sampling
+energy_str: "energy_"          # energy label string used in fine-tuned model names
+rep_num: 2                     # fine-tuned model repetition number
+omol_rep_num: 3                # OMOL model repetition number
+omol_energy_str: "energy_"     # OMOL energy suffix/prefix string
+
+model_names:
+  - GO-MACE-23_${train_name}_${n}_config_strat_${sample_str}fine_tuned_${energy_str}rep_${rep_num}
+  - MACE-OFF23_medium_${train_name}_${n}_config_strat_${sample_str}fine_tuned_${energy_str}rep_${rep_num}
+  - MACE-MP-0b3_medium_${train_name}_${n}_config_strat_${sample_str}fine_tuned_${energy_str}rep_${rep_num}
+  - MACE-omol-0-extra-large-1024_${train_name}_${n}_config_strat_${sample_str}fine_tuned_${omol_energy_str}rep_${omol_rep_num}
+
+save_name: paper_ft_models_n=46
+
+# run_names defaults to [save_name]; list more here to process multiple runs, e.g.
+# run_names:
+#   - ${save_name}
+
+num_base_models: 4
+num_base_model_comps: 1
+alpha_list: [0.9]
+linestyle_list: ["-"]
+
+# ---- IRC trajectory comparison ----
+test_trj_fpath: data/reaction_data/anthracene_DA/test/anthracene_1_4_DA_wB97M_IRC.xyz
+custom_xyz_parser: "orca_props_parser"   # "orca_props_parser" / "autode_props_parser" / empty for default parsing
+include_forces: false
+ref_prod_index: -1                        # last config of the IRC trajectory is the product
+xlabel: "IRC Image"
+energy_units: "kcal / mol"                # or "meV" / "meV / atom" / "kJ / mol"
+force_units: "meV / A"                    # only used when include_forces: true
+energies_ylim: [-30.0, 35.0]
+# forces_ylim: [0.0, 700.0]               # only used when include_forces: true
+grid_lines: false
+show_legend: false
+cust_legend_colours: ["black"]
+cust_legend_labels: ["DFT"]
+cust_legend_linestyles: ["dashed"]
+# ref_point_labels: ["RS", "TS", "PS"]    # labels for the RS / TS / PS reference points
