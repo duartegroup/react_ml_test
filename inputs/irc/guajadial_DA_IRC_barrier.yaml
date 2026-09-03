@@ -1,18 +1,3 @@
-# Example input YAML for run_reaction_barrier_comparison.py
-# ---------------------------------------------------------------------------
-# Compares base + fine-tuned models along the guajadial_DA IRC trajectory,
-# i.e. the currently uncommented settings in run_reaction_barrier_comparison.py.
-#
-# Run from the repository root with:
-#     rmlt run-reaction-barrier-comparison inputs/IRC/guajadial_DA_IRC_barrier.yaml
-# (or equivalently: python -m react_ml_test_public.scripts.run_reaction_barrier_comparison
-# inputs/IRC/guajadial_DA_IRC_barrier.yaml)
-#
-# Strings may reference any other field with ${field_name} templating, which is
-# substituted automatically (see inputs/test/*.yaml for the same convention).
-# Any omitted field is set to None.
-# ---------------------------------------------------------------------------
-
 # ---- model / fine-tuning selection ----
 n: 50
 train_name: guajadial_DA_train
@@ -33,6 +18,7 @@ model_names:
   - MACE-omol-0-extra-large-1024_${train_name}_${n}_config_strat_${sample_str}fine_tuned_${omol_energy_str}rep_${omol_rep_num}
 
 save_name: paper_ft_models_n=50
+
 # run_names defaults to [save_name]; list more here to process multiple runs, e.g.
 # run_names:
 #   - ${save_name}
@@ -43,7 +29,7 @@ alpha_list: [0.3, 0.9]
 linestyle_list: ["-.", "-"]
 
 # ---- IRC trajectory comparison ----
-test_trj_fpath: data/reaction_data/guajadial_DA/valid/guajadial_wB97M_IRC.xyz
+test_trj_fpath: data/reaction_data/guajadial_DA/test/guajadial_wB97M_IRC.xyz
 custom_xyz_parser: "orca_props_parser"   # "orca_props_parser" / "autode_props_parser" / empty for default parsing
 include_forces: false
 ref_prod_index: -1                        # last config of the IRC trajectory is the product
@@ -57,4 +43,4 @@ show_legend: false
 cust_legend_colours: ["black"]
 cust_legend_labels: ["DFT"]
 cust_legend_linestyles: ["dashed"]
-# ref_point_labels: ["RS", "TS", "PS"]    # labels for the RS / TS / PS reference points
+ref_point_labels: ["RS", "TS", "PS"]    # labels for the RS / TS / PS reference points
