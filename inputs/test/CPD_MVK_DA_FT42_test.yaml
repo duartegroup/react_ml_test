@@ -1,18 +1,20 @@
-model_names:
-  - GO-MACE-23
-  - GO-MACE-23_CPD_MVK_DA_train_42_config_strat_ts_gauss_fine_tuned_energy_rep_1
-  - MACE-OFF23_medium
-  - MACE-OFF23_medium_CPD_MVK_DA_train_42_config_strat_ts_gauss_fine_tuned_energy_rep_1
-  - MACE-MP-0b3_medium
-  - MACE-MP-0b3_medium_CPD_MVK_DA_train_42_config_strat_ts_gauss_fine_tuned_energy_rep_1
-  - MACE-omol-0-extra-large-1024
-  - MACE-omol-0-extra-large-1024_CPD_MVK_DA_train_42_config_strat_ts_gauss_fine_tuned_energy_rep_1
 n: 42
-ft_train_name: CPD_MVK_DA_train
+train_name: CPD_MVK_DA_train
 test_name: CPD_MVK_DA_test
+sample_str: "ts_gauss_"
 rep_num: 1
+energy_str: energy_
 omol_rep_num: 1
 omol_energy_str: energy_
+model_names:
+  - GO-MACE-23
+  - GO-MACE-23_${train_name}_${n}_config_strat_${sample_str}fine_tuned_${energy_str}rep_${rep_num}
+  - MACE-OFF23_medium
+  - MACE-OFF23_medium_${train_name}_${n}_config_strat_${sample_str}fine_tuned_${energy_str}rep_${rep_num}
+  - MACE-MP-0b3_medium
+  - MACE-MP-0b3_medium_${train_name}_${n}_config_strat_${sample_str}fine_tuned_${energy_str}rep_${rep_num}
+  - MACE-omol-0-extra-large-1024
+  - MACE-omol-0-extra-large-1024_${train_name}_${n}_config_strat_${sample_str}fine_tuned_${omol_energy_str}rep_${omol_rep_num}
 test_set_ids:
   - 0
   - 1

@@ -18,6 +18,7 @@ from react_ml_test_public.helpers.io import (
     flexible_ase_read,
     get_name_from_path,
     orca_props_parser,
+    substitute_yaml_variables
 )
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.model_eval import get_test_and_pred_data
@@ -483,7 +484,7 @@ if __name__ == "__main__":
 
     import argparse
 
-    # Input YAML config path is given as a single command-line argument.
+    # input YAML config path from command-line argument.
     parser = argparse.ArgumentParser(
         description="Run an MLIP test-set comparison driven by an input YAML config "
                     "file (format described above).",
@@ -495,7 +496,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # safeguards
+    # input safeguards
     input_yaml_fpath = args.input_yaml
     if not input_yaml_fpath.endswith((".yaml", ".yml")):
         parser.error(f"Input file must be a YAML file (.yaml / .yml), got: {input_yaml_fpath!r}")
@@ -504,12 +505,14 @@ if __name__ == "__main__":
 
     with open(input_yaml_fpath, "r") as f:
         input_config = yaml.safe_load(f) or {}
+        input_config = substitute_yaml_variables(input_config, input_config)
     if not isinstance(input_config, dict):
         parser.error(
             f"Input YAML must be a mapping of config fields (see format above), got a "
             f"{type(input_config).__name__}: {input_yaml_fpath!r}"
         )
 
+    # input vars
     model_names = input_config.get("model_names", None)
     n = input_config.get("n", None)
     ft_train_name = input_config.get("ft_train_name", None)

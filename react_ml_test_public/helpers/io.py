@@ -506,3 +506,25 @@ def load_model_calculator(model_name: str,
     except Exception as e:
         logger.warning(f"{model_name} was unable to be loaded because of error: \n{e} \n... Returning None for calc instead...")
         return None
+
+
+def substitute_yaml_variables(value: dict, variables: dict):
+    """
+    Little recursive function to fill in YAML variables based on its own defined variable names.
+
+    USAGE: yaml_config = substitute_yaml_variables(yaml_config, yaml_config)
+    """
+    if isinstance(value, str):
+        return re.sub(
+            r"\$\{(\w+)\}",
+            lambda match: str(variables.get(match.group(1), match.group(0))),
+            value,
+        )
+    elif isinstance(value, list):
+        return [substitute_yaml_variables(item, variables) for item in value]
+    elif isinstance(value, dict):
+        return {
+            key: substitute_yaml_variables(item, variables)
+            for key, item in value.items()
+        }
+    return value
