@@ -116,7 +116,3 @@ inputs/
 out/
 testing/
 ```
-
-All Python code uses absolute imports under the `react_ml_test_public` namespace, so it can be
-run as an installed package. The package must be installed with `pip install -e .` (or
-`pip install .`) for the scripts to be runnable.
