@@ -14,6 +14,7 @@ from react_ml_test_public.helpers.io import (
     get_name_from_path,
     load_data_cache,
     orca_props_parser,
+    substitute_yaml_variables,
 )
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.model_eval import get_test_and_pred_data
@@ -50,6 +51,171 @@ else:
     print("No CUDA device available, using CPU...")
 
 if __name__ == "__main__":
+
+    """Run an MLIP reaction-barrier comparison along an IRC trajectory.
+
+    The path to the input YAML file is given as a single command-line argument:
+
+        rmlt run-reaction-barrier-comparison inputs/IRC/guajadial_DA_IRC_barrier.yaml
+
+    (or equivalently: python -m react_ml_test_public.scripts.run_reaction_barrier_comparison
+    inputs/IRC/guajadial_DA_IRC_barrier.yaml)
+
+    Input YAML format (see inputs/IRC/guajadial_DA_IRC_barrier.yaml for a full example):
+
+    Fields:
+        n:                      # training set size.
+        train_name:             # fine-tuning training set name.
+        sample_str:             # sampling-strategy suffix used in fine-tuned names (e.g. "ts_gauss_").
+        energy_str:             # energy label string used in fine-tuned names (e.g. "energy_").
+        rep_num:                # fine-tuned model repetition number.
+        omol_rep_num:           # OMOL model repetition number.
+        omol_energy_str:        # OMOL energy suffix/prefix string.
+        model_names:            # list of model names to compare (supports ${var} templating).
+        save_name:              # output name.
+        run_names:              # run names to process (defaults to [save_name]).
+        num_base_models:        # number of base models.
+        num_base_model_comps:   # number of comparisons per base model.
+        alpha_list:             # alpha values used for plotting.
+        linestyle_list:         # line style per base-model comparison.
+
+        test_trj_fpath:         # path to the IRC trajectory .xyz to compare against.
+        custom_xyz_parser:      # "orca_props_parser" / "autode_props_parser" / empty.
+        include_forces:         # whether to also compare force norms.
+        ref_prod_index:         # index of the product reference config (e.g. -1).
+        xlabel:                 # x-axis label, e.g. "IRC Image".
+        energy_units:           # energy unit for plots / CSV, e.g. "kcal / mol".
+        force_units:            # force unit for force-error plots, e.g. "meV / A".
+        energies_ylim:          # [lo, hi] y-limits for the reaction-profile plot.
+        forces_ylim:            # [lo, hi] y-limits for force-error plots.
+        grid_lines:             # whether to draw grid lines.
+        show_legend:            # whether to show the legend.
+        cust_legend_colours:    # legend colours for the reference (DFT) line.
+        cust_legend_labels:     # legend labels for the reference (DFT) line.
+        cust_legend_linestyles: # legend line styles for the reference (DFT) line.
+        ref_point_labels:       # labels for the RS / TS / PS reference points (or empty).
+
+    Any omitted field is set to None.
+    """
+
+    import argparse
+    import yaml
+
+    # input YAML config path from a single command-line argument
+    parser = argparse.ArgumentParser(
+        description="Run an MLIP reaction-barrier comparison driven by an input YAML "
+                    "config file (format described above).",
+        epilog="Example: rmlt run-reaction-barrier-comparison inputs/IRC/guajadial_DA_IRC_barrier.yaml",
+    )
+    parser.add_argument(
+        "input_yaml",
+        help="Path to the input YAML config file "
+             "(e.g. inputs/IRC/guajadial_DA_IRC_barrier.yaml).",
+    )
+    args = parser.parse_args()
+
+    # input safeguards
+    input_yaml_fpath = args.input_yaml
+    if not input_yaml_fpath.endswith((".yaml", ".yml")):
+        parser.error(f"Input file must be a YAML file (.yaml / .yml), got: {input_yaml_fpath!r}")
+    if not os.path.isfile(input_yaml_fpath):
+        parser.error(f"Input YAML file not found: {input_yaml_fpath!r}")
+
+    with open(input_yaml_fpath, "r") as f:
+        input_config = yaml.safe_load(f) or {}
+        input_config = substitute_yaml_variables(input_config, input_config)
+    if not isinstance(input_config, dict):
+        parser.error(
+            f"Input YAML must be a mapping of config fields (see format above), got a "
+            f"{type(input_config).__name__}: {input_yaml_fpath!r}"
+        )
+
+    # ===== model / fine-tuning selection =====
+    n = input_config.get("n", None)
+    train_name = input_config.get("train_name", None)
+    sample_str = input_config.get("sample_str", None)
+    energy_str = input_config.get("energy_str", None)
+    rep_num = input_config.get("rep_num", None)
+    omol_rep_num = input_config.get("omol_rep_num", None)
+    omol_energy_str = input_config.get("omol_energy_str", None)
+    model_names = input_config.get("model_names", None)
+    save_name = input_config.get("save_name", None)
+    num_base_models = input_config.get("num_base_models", None)
+    num_base_model_comps = input_config.get("num_base_model_comps", None)
+    alpha_list = input_config.get("alpha_list", None)
+    linestyle_list = input_config.get("linestyle_list", None)
+    if not model_names:
+        parser.error("model_names must be a non-empty list of model names in the input YAML.")
+    if num_base_models is None or num_base_model_comps is None:
+        parser.error("num_base_models and num_base_model_comps must be set in the input YAML.")
+    alpha_list = alpha_list if alpha_list is not None else [1.0]
+    linestyle_list = linestyle_list if linestyle_list is not None else ["-"]
+    run_names = input_config.get("run_names", None)
+    if run_names is None:
+        run_names = [save_name] if save_name is not None else []
+
+    # ===== IRC trajectory comparison =====
+    test_trj_fpath = input_config.get("test_trj_fpath", None)
+    if test_trj_fpath is None:
+        parser.error("test_trj_fpath must be set in the input YAML "
+                     "(path to the IRC trajectory .xyz to compare against).")
+    custom_xyz_parser_name = input_config.get("custom_xyz_parser", None)
+    include_forces = input_config.get("include_forces", False)
+    ref_prod_index = input_config.get("ref_prod_index", -1)
+    xlabel = input_config.get("xlabel", "Index")
+    force_units = input_config.get("force_units", "meV / A")
+    grid_lines = input_config.get("grid_lines", False)
+    show_legend = input_config.get("show_legend", False)
+    cust_legend_colours = input_config.get("cust_legend_colours", ["black"])
+    cust_legend_labels = input_config.get("cust_legend_labels", ["DFT"])
+    cust_legend_linestyles = input_config.get("cust_legend_linestyles", ["dashed"])
+    ref_point_labels = input_config.get("ref_point_labels", None)
+
+    def _parse_ylim(value):
+        """Parse a [lo, hi] y-limit from the YAML (or return None)."""
+        if value is None:
+            return None
+        try:
+            value = [float(x) for x in value]
+        except (TypeError, ValueError):
+            return None
+        return (value[0], value[1]) if len(value) == 2 else None
+
+    energies_ylim = _parse_ylim(input_config.get("energies_ylim", None))
+    forces_ylim = _parse_ylim(input_config.get("forces_ylim", None))
+
+    # map parser / unit names given as strings in the YAML onto the python objects they refer to
+    _xyz_parsers = {
+        "orca_props_parser": orca_props_parser,
+        "autode_props_parser": autode_props_parser,
+    }
+    if isinstance(custom_xyz_parser_name, str):
+        custom_xyz_parser = _xyz_parsers.get(custom_xyz_parser_name, None)
+        if custom_xyz_parser is None:
+            parser.error(f"Unknown custom_xyz_parser: {custom_xyz_parser_name!r} "
+                         f"(choose from {sorted(_xyz_parsers)}).")
+    else:
+        custom_xyz_parser = custom_xyz_parser_name  # e.g. None
+
+    _energy_units = {
+        "mev": MEV,
+        "mev/atom": MEV_PER_ATOM,
+        "kj/mol": KJ_PER_MOL,
+        "kcal/mol": KCAL_PER_MOL,
+    }
+    energy_units_name = input_config.get("energy_units", None)
+    if energy_units_name is None:
+        energy_units = KCAL_PER_MOL
+    else:
+        energy_units = _energy_units.get("".join(energy_units_name.lower().split()), energy_units_name)
+
+    # ===== derived plot lists =====
+    labels = [get_formatted_model_name(model_name) for model_name in model_names]
+    custom_linestyle_list = linestyle_list * num_base_models
+    custom_alpha_list = alpha_list * num_base_models
+    custom_zorder_list = [len(model_names) + 2 - i for i in range(len(model_names))]
+    colours = [x for colour in PAPER_MODEL_COLOURS.values() for x in [colour] * num_base_model_comps]
+
 
     # ===== 1. SELECT BASE MODEL HERE =====
 
@@ -91,68 +257,26 @@ if __name__ == "__main__":
     # --- specific fine-tuned model comparison ---
     # n, ft_system_name, ft_train_name, sample_str, rep_num, omol_rep_num, omol_energy_str = 42, "CPD_MVK_DA", "CPD_MVK_DA_train", 'ts_gauss_', 1, 1, 'energy_'
     # n, ft_system_name, ft_train_name, sample_str, rep_num, omol_rep_num, omol_energy_str = 46, "anthracene_DA", "anthracene_DA_train", '', 2, 3, 'energy_'
-    n, ft_system_name, ft_train_name, sample_str, rep_num, omol_rep_num, omol_energy_str = 50, "guajadial_DA", "guajadial_DA_train", '',  1, 1, ''
 
     # regular fine-tuned models
     # energy_str = ''
     # energy_str = 'energy_'
-    model_names = [
-                f"GO-MACE-23",
                 # f"GO-MACE-23_{ft_train_name}_{n}_config_strat_fine_tuned_rep_{rep_num}",
-                f"GO-MACE-23_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_energy_rep_{rep_num}",
                 # f"anthracene_DA_GO46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_rep_{rep_num}",
                 # f"anthracene_DA_GO46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_energy_rep_{rep_num}",
                 # f"GO-MACE-23_{ft_train_name}_fine_tuned_energy_rep_1",
-                f"MACE-OFF23_medium", 
                 # f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_fine_tuned_rep_{rep_num}", 
-                f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_energy_rep_{rep_num}",
                 # f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_{rep_num}",
                 # f"anthracene_DA_OFF46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_rep_{rep_num}",
                 # f"anthracene_DA_OFF46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_energy_rep_{rep_num}",
                 # f"MACE-OFF23_medium_{ft_train_name}_fine_tuned_energy_rep_1",
-                f"MACE-MP-0b3_medium",
                 # f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_fine_tuned_rep_{rep_num}",
-                f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_{sample_str}fine_tuned_energy_rep_{rep_num}",
                 # f"anthracene_DA_MP46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_rep_{rep_num}",
                 # f"anthracene_DA_MP46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_energy_rep_{rep_num}",
                 # f"MACE-MP-0b3_medium_{ft_train_name}_fine_tuned_energy_rep_1",
-                'MACE-omol-0-extra-large-1024',
-                f"MACE-omol-0-extra-large-1024_{ft_train_name}_{n}_config_strat_fine_tuned_{omol_energy_str}rep_{omol_rep_num}"
                 # f"MACE-omol-0-extra-large-1024_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_{rep_num}"
-    ]
 
-    # uniform vs ts gauss sampling
-    # model_names = [
-    #         # f"GO-MACE-23_{ft_train_name}_{n}_config_strat_fine_tuned_rep_{rep_num}",
-    #         f"GO-MACE-23_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_{rep_num}",
-    #         # f"GO-MACE-23_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_2",
-    #         # f"GO-MACE-23_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_3",
-    #         f"GO-MACE-23_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_1",
-    #         # f"GO-MACE-23_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_2",
-    #         # f"GO-MACE-23_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_3",
-    #         # f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_fine_tuned_rep_{rep_num}",
-    #         f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_{rep_num}",
-    #         # f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_2",
-    #         # f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_3",
-    #         f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_1",
-    #         # f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_2",
-    #         # f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_3",
-    #         # f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_fine_tuned_rep_{rep_num}",
-    #         f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_{rep_num}",
-    #         # f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_2",
-    #         # f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_3",
-    #         f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_1",
-    #         # f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_2",
-    #         # f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_3",
-    #         # 'MACE-omol-0-extra-large-1024',
-    #         f"MACE-omol-0-extra-large-1024_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_{rep_num}",
-    #         f"MACE-omol-0-extra-large-1024_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_1"
-    #         # f"MACE-omol-0-extra-large-1024_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_2"
-    # ]
-
-    save_name = f"paper_ft_models_n={n}"
     # save_name = f"paper_ft_models_n={n}_w_extra_sample"
-    labels = [get_formatted_model_name(model_name) for model_name in model_names]
 
     # just models (no reference)
     # colours = list(PAPER_MODEL_COLOURS.values())
@@ -160,22 +284,9 @@ if __name__ == "__main__":
     # custom_alpha_list = None
 
     # paper models with a reference each
-    num_base_models = 4
     # num_base_model_comps, alpha_list = 3, [0.2, 0.6, 0.9]  # 2 by default
-    num_base_model_comps, alpha_list, linestyle_list = 2, [0.3, 0.9], ['-.', '-']  # 2 by default
     # num_base_model_comps, alpha_list, linestyle_list = 1, [0.9], ['-', '-']  # 2 by default
-    custom_linestyle_list = linestyle_list * num_base_models
-    custom_alpha_list=alpha_list * num_base_models
-    custom_zorder_list = [len(model_names) + 2 - i for i in range(len(model_names))]
-    colours = [x for colour in PAPER_MODEL_COLOURS.values() for x in [colour] * num_base_model_comps]
-    cust_legend_colours = [x for colour in PAPER_MODEL_COLOURS.values() for x in [colour] * num_base_model_comps]
-    show_legend=False
-    cust_legend_labels = [f"{get_formatted_model_name(model_name)}" for model_name in PAPER_MODELS] + [f"{get_formatted_model_name(model_name)} TS FT"  for model_name in PAPER_MODELS],
-    cust_legend_labels = [label for model_name in PAPER_MODELS for label in [f"{get_formatted_model_name(model_name)}", f"{get_formatted_model_name(model_name)} FT Energies"]],
-    cust_legend_linestyles = [(0, (1, 1)), '-'] * (len(model_names) // 2)
-    legend_ncols = len(model_names) // 2
 
-    run_names = [save_name]
 
     # ===== 3. SPECIFY TRAJECTORY FOR COMPARISON HERE =====
 
@@ -198,30 +309,15 @@ if __name__ == "__main__":
 
     # --- guajadial IRC ---
     # test_trj_fpath, energies_ylim  = f"{GUAJADIAL_DA_DATA_DIR}/valid/guajadial_wB97M_IRC_trunc.xyz", (-45.0, 45.0)
-    test_trj_fpath, energies_ylim  = f"{GUAJADIAL_DA_DATA_DIR}/valid/guajadial_wB97M_IRC.xyz", (-25.0, 22.0)
-    custom_xyz_parser = orca_props_parser
-    include_forces = False
-    ref_prod_index = -1
-    xlabel = 'IRC Image'
 
     # === UNITS ===
     # energy_units = MEV
     # energy_units = KJ_PER_MOL
     # energy_units = MEV_PER_ATOM
-    energy_units = KCAL_PER_MOL
-    force_units = 'meV / A'
 
     # === PLOT SETTINGS ===
-    plot_error_range = None  # kcal / mol
-    grid_lines = False
-    cust_legend_colours = ['black']
-    cust_legend_labels = ['DFT']
-    cust_legend_linestyles = ['dashed']
-    show_legend = False
     # ref_point_labels =['RS', 'TS', 'PS']
-    ref_point_labels = None
 
-    indices_filter = [i for i in range(9, 17)]
 
     # Choose Test System
 
