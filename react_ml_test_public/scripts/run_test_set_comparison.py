@@ -13,12 +13,12 @@ import ase
 import matplotlib.pyplot as plt
 import torch
 
+from react_ml_test_public.helpers import inputs as rmlt_inputs
 from react_ml_test_public.helpers.io import (
     autode_props_parser,
     flexible_ase_read,
     get_name_from_path,
     orca_props_parser,
-    substitute_yaml_variables
 )
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.model_eval import get_test_and_pred_data
@@ -468,7 +468,7 @@ if __name__ == "__main__":
     Any omitted field is set to None.
     """
 
-    import yaml
+    import argparse
 
     model_loaders = None
     global_plot_settings = PlotSettings()
@@ -482,8 +482,6 @@ if __name__ == "__main__":
     offset_ref_fpath = None
     sample_str = ""
 
-    import argparse
-
     # input YAML config path from command-line argument.
     parser = argparse.ArgumentParser(
         description="Run an MLIP test-set comparison driven by an input YAML config "
@@ -496,37 +494,25 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # input safeguards
-    input_yaml_fpath = args.input_yaml
-    if not input_yaml_fpath.endswith((".yaml", ".yml")):
-        parser.error(f"Input file must be a YAML file (.yaml / .yml), got: {input_yaml_fpath!r}")
-    if not os.path.isfile(input_yaml_fpath):
-        parser.error(f"Input YAML file not found: {input_yaml_fpath!r}")
-
-    with open(input_yaml_fpath, "r") as f:
-        input_config = yaml.safe_load(f) or {}
-        input_config = substitute_yaml_variables(input_config, input_config)
-    if not isinstance(input_config, dict):
-        parser.error(
-            f"Input YAML must be a mapping of config fields (see format above), got a "
-            f"{type(input_config).__name__}: {input_yaml_fpath!r}"
-        )
+    # load + process the input YAML (see react_ml_test_public/helpers/inputs.py)
+    resolved = rmlt_inputs.resolve_test_set_comparison_yaml(args.input_yaml, parser)
 
     # input vars
-    model_names = input_config.get("model_names", None)
-    n = input_config.get("n", None)
-    ft_train_name = input_config.get("ft_train_name", None)
-    test_name = input_config.get("test_name", None)
-    rep_num = input_config.get("rep_num", None)
-    omol_rep_num = input_config.get("omol_rep_num", None)
-    omol_energy_str = input_config.get("omol_energy_str", None)
-    test_set_ids = input_config.get("test_set_ids", None)
-    save_name = input_config.get("save_name", None)
-    run_names = input_config.get("run_names", None)
-    plot = input_config.get("plot", None)
-    num_base_models = input_config.get("num_base_models", None)
-    num_base_model_comps = input_config.get("num_base_model_comps", None)
-    alpha_list = input_config.get("alpha_list", None)
+    model_names = resolved["model_names"]
+    n = resolved["n"]
+    ft_train_name = resolved["ft_train_name"]
+    test_name = resolved["test_name"]
+    rep_num = resolved["rep_num"]
+    omol_rep_num = resolved["omol_rep_num"]
+    omol_energy_str = resolved["omol_energy_str"]
+    test_set_ids = resolved["test_set_ids"]
+    save_name = resolved["save_name"]
+    run_names = resolved["run_names"]
+    plot = resolved["plot"]
+    num_base_models = resolved["num_base_models"]
+    num_base_model_comps = resolved["num_base_model_comps"]
+    alpha_list = resolved["alpha_list"]
+    del resolved
 
     energies_ylim, forces_ylim = (-0.1, 120), (7.0, 1001.0)
 
@@ -719,7 +705,7 @@ if __name__ == "__main__":
                                     ]
             pbc_box = None
             react_coords = [(1, 12), (6, 11)]
-            ref_ts_config = flexible_ase_read(f'{CPD_MVK_DA_DATA_DIR}/TS/endo_DA_vac_TS_wB97M.xyz')[0]
+            ref_ts_config = flexible_ase_read(f'{CPD_MVK_DA_DATA_DIR}/TS/CPD_MVK_DA_vac_TS_wB97M.xyz')[0]
             offset_ref_fpath = f"{CPD_MVK_DA_DATA_DIR}/test/{test_name}.xyz"
 
         # --- anthracene test set ---

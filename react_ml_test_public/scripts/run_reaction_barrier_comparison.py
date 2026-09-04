@@ -6,16 +6,12 @@ import re
 
 import numpy as np
 import torch
-import yaml
 from matplotlib import pyplot as plt
 
+from react_ml_test_public.helpers import inputs as rmlt_inputs
 from react_ml_test_public.helpers.io import (
-    autode_props_parser,
     flexible_ase_read,
     get_name_from_path,
-    load_data_cache,
-    orca_props_parser,
-    substitute_yaml_variables,
 )
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.model_eval import get_test_and_pred_data
@@ -116,100 +112,42 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # input safeguards
-    input_yaml_fpath = args.input_yaml
-    if not input_yaml_fpath.endswith((".yaml", ".yml")):
-        parser.error(f"Input file must be a YAML file (.yaml / .yml), got: {input_yaml_fpath!r}")
-    if not os.path.isfile(input_yaml_fpath):
-        parser.error(f"Input YAML file not found: {input_yaml_fpath!r}")
-
-    with open(input_yaml_fpath, "r") as f:
-        input_config = yaml.safe_load(f) or {}
-        input_config = substitute_yaml_variables(input_config, input_config)
-    if not isinstance(input_config, dict):
-        parser.error(
-            f"Input YAML must be a mapping of config fields (see format above), got a "
-            f"{type(input_config).__name__}: {input_yaml_fpath!r}"
-        )
+    # load + process the input YAML (see react_ml_test_public/helpers/inputs.py)
+    resolved = rmlt_inputs.resolve_reaction_barrier_comparison_yaml(args.input_yaml, parser)
 
     # ===== model / fine-tuning selection =====
-    n = input_config.get("n", None)
-    train_name = input_config.get("train_name", None)
-    sample_str = input_config.get("sample_str", None)
-    energy_str = input_config.get("energy_str", None)
-    rep_num = input_config.get("rep_num", None)
-    omol_rep_num = input_config.get("omol_rep_num", None)
-    omol_energy_str = input_config.get("omol_energy_str", None)
-    model_names = input_config.get("model_names", None)
-    save_name = input_config.get("save_name", None)
-    num_base_models = input_config.get("num_base_models", None)
-    num_base_model_comps = input_config.get("num_base_model_comps", None)
-    alpha_list = input_config.get("alpha_list", None)
-    linestyle_list = input_config.get("linestyle_list", None)
-    if not model_names:
-        parser.error("model_names must be a non-empty list of model names in the input YAML.")
-    if num_base_models is None or num_base_model_comps is None:
-        parser.error("num_base_models and num_base_model_comps must be set in the input YAML.")
-    alpha_list = alpha_list if alpha_list is not None else [1.0]
-    linestyle_list = linestyle_list if linestyle_list is not None else ["-"]
-    run_names = input_config.get("run_names", None)
-    if run_names is None:
-        run_names = [save_name] if save_name is not None else []
+    n = resolved["n"]
+    train_name = resolved["train_name"]
+    sample_str = resolved["sample_str"]
+    energy_str = resolved["energy_str"]
+    rep_num = resolved["rep_num"]
+    omol_rep_num = resolved["omol_rep_num"]
+    omol_energy_str = resolved["omol_energy_str"]
+    model_names = resolved["model_names"]
+    save_name = resolved["save_name"]
+    run_names = resolved["run_names"]
+    num_base_models = resolved["num_base_models"]
+    num_base_model_comps = resolved["num_base_model_comps"]
+    alpha_list = resolved["alpha_list"]
+    linestyle_list = resolved["linestyle_list"]
 
     # ===== IRC trajectory comparison =====
-    test_trj_fpath = input_config.get("test_trj_fpath", None)
-    if test_trj_fpath is None:
-        parser.error("test_trj_fpath must be set in the input YAML "
-                     "(path to the IRC trajectory .xyz to compare against).")
-    custom_xyz_parser_name = input_config.get("custom_xyz_parser", None)
-    include_forces = input_config.get("include_forces", False)
-    ref_prod_index = input_config.get("ref_prod_index", -1)
-    xlabel = input_config.get("xlabel", "Index")
-    force_units = input_config.get("force_units", "meV / A")
-    grid_lines = input_config.get("grid_lines", False)
-    show_legend = input_config.get("show_legend", False)
-    cust_legend_colours = input_config.get("cust_legend_colours", ["black"])
-    cust_legend_labels = input_config.get("cust_legend_labels", ["DFT"])
-    cust_legend_linestyles = input_config.get("cust_legend_linestyles", ["dashed"])
-    ref_point_labels = input_config.get("ref_point_labels", None)
-
-    def _parse_ylim(value):
-        """Parse a [lo, hi] y-limit from the YAML (or return None)."""
-        if value is None:
-            return None
-        try:
-            value = [float(x) for x in value]
-        except (TypeError, ValueError):
-            return None
-        return (value[0], value[1]) if len(value) == 2 else None
-
-    energies_ylim = _parse_ylim(input_config.get("energies_ylim", None))
-    forces_ylim = _parse_ylim(input_config.get("forces_ylim", None))
-
-    # map parser / unit names given as strings in the YAML onto the python objects they refer to
-    _xyz_parsers = {
-        "orca_props_parser": orca_props_parser,
-        "autode_props_parser": autode_props_parser,
-    }
-    if isinstance(custom_xyz_parser_name, str):
-        custom_xyz_parser = _xyz_parsers.get(custom_xyz_parser_name, None)
-        if custom_xyz_parser is None:
-            parser.error(f"Unknown custom_xyz_parser: {custom_xyz_parser_name!r} "
-                         f"(choose from {sorted(_xyz_parsers)}).")
-    else:
-        custom_xyz_parser = custom_xyz_parser_name  # e.g. None
-
-    _energy_units = {
-        "mev": MEV,
-        "mev/atom": MEV_PER_ATOM,
-        "kj/mol": KJ_PER_MOL,
-        "kcal/mol": KCAL_PER_MOL,
-    }
-    energy_units_name = input_config.get("energy_units", None)
-    if energy_units_name is None:
-        energy_units = KCAL_PER_MOL
-    else:
-        energy_units = _energy_units.get("".join(energy_units_name.lower().split()), energy_units_name)
+    test_trj_fpath = resolved["test_trj_fpath"]
+    custom_xyz_parser = resolved["custom_xyz_parser"]
+    include_forces = resolved["include_forces"]
+    ref_prod_index = resolved["ref_prod_index"]
+    xlabel = resolved["xlabel"]
+    force_units = resolved["force_units"]
+    grid_lines = resolved["grid_lines"]
+    show_legend = resolved["show_legend"]
+    cust_legend_colours = resolved["cust_legend_colours"]
+    cust_legend_labels = resolved["cust_legend_labels"]
+    cust_legend_linestyles = resolved["cust_legend_linestyles"]
+    ref_point_labels = resolved["ref_point_labels"]
+    energy_units = resolved["energy_units"]
+    energies_ylim = resolved["energies_ylim"]
+    forces_ylim = resolved["forces_ylim"]
+    del resolved
 
     # ===== derived plot lists =====
     labels = [get_formatted_model_name(model_name) for model_name in model_names]

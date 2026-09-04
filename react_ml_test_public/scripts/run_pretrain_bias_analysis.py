@@ -9,13 +9,14 @@ from matplotlib.colors import to_rgba
 from matplotlib.lines import Line2D
 from scipy.stats import linregress, pearsonr
 
+from react_ml_test_public.helpers import inputs as rmlt_inputs
+
 from react_ml_test_public.helpers.io import (
     flexible_ase_read,
     get_ase_atoms_forces,
     get_name_from_path,
     load_data_cache,
     save_npz_data_cache,
-    substitute_yaml_variables,
 )
 from react_ml_test_public.helpers.model_eval import (
     get_model_predictions,
@@ -399,225 +400,6 @@ def category_scatter_plot(all_series: list[np.array],
  
 
 
-def resolve_input_yaml(input_config: dict, parser=None):
-    """Resolve and validate a run_pretrain_bias_analysis YAML config into a flat dict of
-    variables matching the script's ``__main__`` expectations.
-
-    ``parser`` (optional argparse.ArgumentParser) reports errors the same way as the other
-    YAML-driven scripts; when None a ValueError is raised instead (useful for testing).
-    """
-    def _error(message):
-        if parser is not None:
-            parser.error(message)
-        raise ValueError(message)
-
-    def _need(key):
-        value = input_config.get(key, None)
-        if value is None:
-            _error(f"Missing required field '{key}' in input YAML.")
-        return value
-
-    def _parse_ylim(value):
-        """Parse a [lo, hi] y-limit from a config value (or return None)."""
-        if value is None:
-            return None
-        try:
-            value = [float(x) for x in value]
-        except (TypeError, ValueError):
-            return None
-        return (value[0], value[1]) if len(value) == 2 else None
-
-    def _as_bool(value, default=False):
-        """Coerce a config value to a bool (handles quoted strings too)."""
-        if value is None:
-            return default
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            return value.strip().lower() in ("true", "1", "yes")
-        return bool(value)
-
-    # ---- test system ----
-    test_name = _need("test_name")
-    test_fpath = _need("test_fpath")
-    react_coords = [tuple(pair) for pair in _need("react_coords")]
-    ts_dist_threshold = float(input_config.get("ts_dist_threshold", 2.0))
-    n_solute_atoms = int(_need("n_solute_atoms"))
-    ref_ts_config = flexible_ase_read(_need("ref_ts_fpath"))[0]
-
-    input_lot_test_fpaths = input_config.get("input_lot_test_fpaths", None)
-    if input_lot_test_fpaths is None:
-        _error("Missing required field 'input_lot_test_fpaths' in input YAML.")
-    if isinstance(input_lot_test_fpaths, str):
-        input_lot_test_fpaths = [input_lot_test_fpaths]
-    num_models = len(input_lot_test_fpaths)
-
-    # ---- base model / fine-tuning selection ----
-    n = int(_need("n"))
-    model_names = _need("model_names")
-    if len(model_names) != num_models:
-        _error(f"'model_names' must have one entry per 'input_lot_test_fpaths' entry "
-               f"({num_models}), got {len(model_names)}.")
-    missing_colours = [name for name in model_names if name not in PAPER_MODEL_COLOURS]
-    if missing_colours:
-        _error(f"Model names missing from PAPER_MODEL_COLOURS (needed for plot colours): "
-               f"{missing_colours}")
-    model_plt_labels = input_config.get("model_plt_labels", None)
-    if model_plt_labels is None:
-        model_plt_labels = {name: name for name in model_names}
-    model_ft_n = input_config.get("model_ft_n", n)
-    model_full_ft_n = input_config.get("model_full_ft_n", n)
-    ft_train_name = _need("ft_train_name")
-    sample_str = str(input_config.get("sample_str", ""))
-    energy_str = str(input_config.get("energy_str", "energy_"))
-    rep_num = int(input_config.get("rep_num", 1))
-    full_ft_rep_num = int(input_config.get("full_ft_rep_num", 1))
-
-    # ---- optional relative baselines (default off) ----
-    from_scratch_names = input_config.get("from_scratch_names", None)
-    from_scratch_energy_str = str(input_config.get("from_scratch_energy_str", ""))
-    zero_shot_ref_names = input_config.get("zero_shot_ref_names", None)
-    ft_ref_names = input_config.get("ft_ref_names", None)
-    rel_comp_str = str(input_config.get("rel_comp_str", ""))
-    abs_y = _as_bool(input_config.get("abs_y", True), default=True)
-    _rel_baselines = [from_scratch_names, zero_shot_ref_names, ft_ref_names]
-    if sum(baseline is not None for baseline in _rel_baselines) > 1:
-        _error("Only one of 'from_scratch_names' / 'zero_shot_ref_names' / 'ft_ref_names' "
-               "may be set at a time.")
-    for _key in ("from_scratch_names", "zero_shot_ref_names", "ft_ref_names"):
-        _value = input_config.get(_key, None)
-        if _value is not None and (len(_value) != num_models or any(x is None for x in _value)):
-            _error(f"'{_key}' must have one non-null entry per base model ({num_models}).")
-
-    # ---- fine-tuned model names ----
-    ft_model_names, full_ft_model_names = [], []
-    rel_comp_model_names, full_rel_comp_model_names = [], []
-    for i, model_name in enumerate(model_names):
-        ft_model_names.append(f"{model_name}_{ft_train_name}_{n}_config_strat_{sample_str}"
-                              f"fine_tuned_{energy_str}rep_{rep_num}")
-        full_ft_model_names.append(f"{model_name}_{ft_train_name}_fine_tuned_"
-                                   f"{energy_str}rep_{full_ft_rep_num}")
-
-        if from_scratch_names is not None:
-            rel_comp_model_names.append(f"{from_scratch_names[i]}_from_scratch_{ft_train_name}_"
-                                        f"{n}_config_strat_{sample_str}{from_scratch_energy_str}rep_1")
-            full_rel_comp_model_names.append(f"{from_scratch_names[i]}_{ft_train_name}_"
-                                             f"from_scratch_{from_scratch_energy_str}rep_{rep_num}")
-            print("Adding from scratch model as relative baseline...")
-        elif zero_shot_ref_names is not None:
-            rel_comp_model_names.append(zero_shot_ref_names[i])
-            full_rel_comp_model_names.append(zero_shot_ref_names[i])
-            print("Adding zero-shot model as relative baseline...")
-        elif ft_ref_names is not None:
-            rel_comp_model_names.append(f"{ft_ref_names[i]}_{ft_train_name}_{n}_config_strat_"
-                                        f"{sample_str}fine_tuned_{energy_str}rep_{rep_num}")
-            full_rel_comp_model_names.append(f"{ft_ref_names[i]}_{ft_train_name}_fine_tuned_"
-                                             f"{energy_str}rep_{full_ft_rep_num}")
-            print("Adding fine-tuned reference model as relative baseline...")
-        else:
-            rel_comp_model_names.append(None)
-            full_rel_comp_model_names.append(None)
-
-    # ---- atom-type subset spec ----
-    atom_type_specs_raw = _need("atom_type_specs")
-    if not isinstance(atom_type_specs_raw, list):
-        _error("'atom_type_specs' must be a list of "
-               "{config_type, react_coord_type, atom_type_ids} mappings.")
-    atom_id_cap = int(input_config.get("atom_id_cap", 500))
-    atom_type_specs = []
-    for _spec in atom_type_specs_raw:
-        if not isinstance(_spec, dict):
-            _error("Each entry of 'atom_type_specs' must be a mapping with "
-                   "'config_type', 'react_coord_type' and 'atom_type_ids' keys.")
-        config_type = _spec.get("config_type", None)
-        react_coord_type = _spec.get("react_coord_type", None)
-        if react_coord_type not in (None, "RS", "TS", "PS"):
-            _error(f"Unrecognised react_coord_type: {react_coord_type!r} "
-                   f"(expected None / 'RS' / 'TS' / 'PS').")
-        atom_type_ids = _spec.get("atom_type_ids", None)
-        if atom_type_ids == "solute":
-            atom_type_ids = list(range(n_solute_atoms))
-        elif atom_type_ids == "solvent":
-            atom_type_ids = list(range(n_solute_atoms, atom_id_cap))
-        elif atom_type_ids is not None and not isinstance(atom_type_ids, list):
-            _error(f"Unrecognised atom_type_ids: {atom_type_ids!r} "
-                   f"(expected None / 'solute' / 'solvent' / a list of atom indices).")
-        atom_type_specs.append((config_type, react_coord_type, atom_type_ids))
-    subset_names = _need("subset_names")
-    if len(subset_names) != len(atom_type_specs):
-        _error(f"'subset_names' must have one label per entry of 'atom_type_specs' "
-               f"({len(atom_type_specs)}), got {len(subset_names)}.")
-    subsets_name = str(_need("subsets_name"))
-
-    # ---- plot settings ----
-    plot_settings = input_config.get("plot_settings", None) or {}
-    show_legend = _as_bool(plot_settings.get("show_legend", True), default=True)
-    per_element = _as_bool(plot_settings.get("per_element", True), default=True)
-    save_corr_plots = _as_bool(plot_settings.get("save_corr_plots", True), default=True)
-    corr_plot_alphas = plot_settings.get("corr_plot_alphas", [0.1, 0.1, 0.1])
-
-    r_plot_settings = plot_settings.get("r_plot", None) or {}
-    scatter_r_y_label = r_plot_settings.get("y_label", "Pearson's r")
-    scatter_r_ylim = _parse_ylim(r_plot_settings.get("ylim", [-0.25, 1.0]))
-
-    beta_plot_settings = plot_settings.get("beta_plot", None) or {}
-    scatter_beta_y_label = beta_plot_settings.get("y_label", "Beta")
-    scatter_beta_ylim = _parse_ylim(beta_plot_settings.get("ylim", None))
-
-    mag_plot_settings = plot_settings.get("mag_plot", None) or {}
-    mag_log_y = _as_bool(mag_plot_settings.get("log_y", False), default=False)
-    mag_remove_negs = _as_bool(mag_plot_settings.get("remove_negs", mag_log_y),
-                               default=mag_log_y)
-    scatter_mag_y_label = mag_plot_settings.get("y_label", "Beta * u")
-    scatter_mag_ylim = _parse_ylim(mag_plot_settings.get("ylim", None))
-    if scatter_mag_ylim is None:
-        scatter_mag_ylim = (1.0, 1201.0) if mag_log_y else (-200.0, 1000.0)
-    return {
-        "test_name": test_name,
-        "test_fpath": test_fpath,
-        "react_coords": react_coords,
-        "ts_dist_threshold": ts_dist_threshold,
-        "n_solute_atoms": n_solute_atoms,
-        "model_ft_n": model_ft_n,
-        "model_full_ft_n": model_full_ft_n,
-        "ref_ts_config": ref_ts_config,
-        "input_lot_test_fpaths": input_lot_test_fpaths,
-        "model_names": model_names,
-        "model_plt_labels": model_plt_labels,
-        "n": n,
-        "ft_train_name": ft_train_name,
-        "sample_str": sample_str,
-        "energy_str": energy_str,
-        "rep_num": rep_num,
-        "full_ft_rep_num": full_ft_rep_num,
-        "from_scratch_names": from_scratch_names,
-        "from_scratch_energy_str": from_scratch_energy_str,
-        "zero_shot_ref_names": zero_shot_ref_names,
-        "ft_ref_names": ft_ref_names,
-        "rel_comp_str": rel_comp_str,
-        "abs_y": abs_y,
-        "ft_model_names": ft_model_names,
-        "full_ft_model_names": full_ft_model_names,
-        "rel_comp_model_names": rel_comp_model_names,
-        "full_rel_comp_model_names": full_rel_comp_model_names,
-        "atom_type_specs": atom_type_specs,
-        "subset_names": subset_names,
-        "subsets_name": subsets_name,
-        "show_legend": show_legend,
-        "per_element": per_element,
-        "save_corr_plots": save_corr_plots,
-        "corr_plot_alphas": corr_plot_alphas,
-        "scatter_r_y_label": scatter_r_y_label,
-        "scatter_r_ylim": scatter_r_ylim,
-        "scatter_beta_y_label": scatter_beta_y_label,
-        "scatter_beta_ylim": scatter_beta_ylim,
-        "scatter_mag_y_label": scatter_mag_y_label,
-        "scatter_mag_ylim": scatter_mag_ylim,
-        "mag_log_y": mag_log_y,
-        "mag_remove_negs": mag_remove_negs,
-    }
-
-
 if __name__ == "__main__":
 
     """Run a pretraining-bias analysis.
@@ -690,7 +472,6 @@ if __name__ == "__main__":
     """
 
     import argparse
-    import yaml
 
     # input YAML config path from a single command-line argument
     parser = argparse.ArgumentParser(
@@ -706,24 +487,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # input safeguards
-    input_yaml_fpath = args.input_yaml
-    if not input_yaml_fpath.endswith((".yaml", ".yml")):
-        parser.error(f"Input file must be a YAML file (.yaml / .yml), got: {input_yaml_fpath!r}")
-    if not os.path.isfile(input_yaml_fpath):
-        parser.error(f"Input YAML file not found: {input_yaml_fpath!r}")
-
-    with open(input_yaml_fpath, "r") as f:
-        input_config = yaml.safe_load(f) or {}
-        input_config = substitute_yaml_variables(input_config, input_config)
-    if not isinstance(input_config, dict):
-        parser.error(
-            f"Input YAML must be a mapping of config fields (see format above), got a "
-            f"{type(input_config).__name__}: {input_yaml_fpath!r}"
-        )
-
-    # ===== resolve the YAML config into the variables used by the analysis below =====
-    resolved = resolve_input_yaml(input_config, parser)
+    # ===== load + process the input YAML (see react_ml_test_public/helpers/inputs.py) =====
+    resolved = rmlt_inputs.resolve_pretrain_bias_analysis_yaml(args.input_yaml, parser)
 
     # test system
     test_name = resolved["test_name"]

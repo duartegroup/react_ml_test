@@ -35,9 +35,7 @@ write to `out/` relative to the current working directory):
 rmlt run-test-set-comparison <args>
 ```
 
-Dashes and underscores are interchangeable, so `rmlt run_test_set_comparison` is the same
-command. List all available scripts (auto-discovered from `react_ml_test_public/scripts/`)
-with:
+List all available scripts with:
 
 ```bash
 rmlt list
@@ -51,15 +49,23 @@ python -m react_ml_test_public.scripts.run_test_set_comparison
 
 ## Examples
 
-Note:
+Note: these examples will load packaged precalculated .npz or .csv file results to produce figures, as running the calculations requires a GPU and the respective models. If you wish to run these examples and calculate all of the results on the fly, remove the relevant .npz cache files and add the required models in react_ml_test_public/models, which can be found in our ORA repository: <>. 
 
 ### 1. Energy + force errors of zero-shot and fine-tuned models for CPD + MVK DA system.
 
 Run: ```rmlt run-test-set-comparison inputs/test/CPD_MVK_DA_FT42_test.yaml```.
 
+Output figures will be saved in `out/plt/bar_plot/`, and `out/csv/`, along with relevant values / statistics printed to the terminal.
+
+This script reproduces Figure 3b\) in the paper, along with relevant supplementary bar plots.
+
 ### 2. IRC energy barrier for zero-shot + FT42 models for CPD + MVK DA system
 
-Run: ```rmlt run-test-set-comparison inputs/CPD_MVK_DA_FT42_IRC.yaml```.
+Run: ```rmlt run-reaction-barrier-comparison inputs/CPD_MVK_DA_FT42_IRC.yaml```.
+
+Output figures will be saved in `out/plt/bar_plot/`, and `out/csv/`, along with relevant values / statistics printed to the terminal.
+
+This script reproduces Figure 3c\) in the paper, along with relevant supplementary plots.
 
 ### 3.
 
