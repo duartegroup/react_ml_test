@@ -8,7 +8,6 @@ Tools and scripts for training / evaluating machine-learned interatomic potentia
    ```bash
    conda activate mlptrain-mace
    pip install hdf5plugin
-   pip install seaborn
    ```
 2. Install this package into the environment. **This install is required** — it provides the
    `rmlt` command used to run the workflow scripts (see [Running the scripts](#running-the-scripts)),
@@ -26,10 +25,8 @@ Notes:
 
 ## Running scripts
 
-Installing the package (see [Setup](#setup)) add the `rmlt` command to your `PATH`.
-Workflow scripts live in the `react_ml_test_public.scripts` package, and `rmlt` runs one of
-them by name from the repository root (the scripts read `data/`, `models/`, `inputs/` and
-write to `out/` relative to the current working directory):
+Installing the package (see [Setup](#setup)) adds the `rmlt` command to your `PATH`.
+Workflow scripts live in the `react_ml_test_public.scripts` package, and `rmlt` runs one of them by name from the repository root (the scripts read `data/`, `models/`, `inputs/` and write to `out/` relative to the current working directory), for e.g.:
 
 ```bash
 rmlt run-test-set-comparison <args>
@@ -49,17 +46,23 @@ python -m react_ml_test_public.scripts.run_test_set_comparison
 
 ## Examples
 
-Note: these examples will load packaged precalculated .npz or .csv file results to produce figures, as running the calculations requires a GPU and the respective models. If you wish to run these examples and calculate all of the results on the fly, remove the relevant .npz cache files and add the required models in react_ml_test_public/models, which can be found in our ORA repository: <>. 
+Note: these examples will load packaged precalculated .npz or .csv file results to produce figures, as running the calculations requires a GPU and the respective models. If you wish to run these examples and fully re-calculate results, remove the relevant .npz cache files and add the required models in react_ml_test_public/models, which can be found in our ORA repository: <>. 
 
-### 1. Energy + force errors of zero-shot and fine-tuned models for CPD + MVK DA system.
+### 1. Test set energy + force errors:
+
+For zero-shot and fine-tuned models for CPD + MVK DA system:
 
 Run: ```rmlt run-test-set-comparison inputs/test/CPD_MVK_DA_FT42_test.yaml```.
 
 Output figures will be saved in `out/plt/bar_plot/`, and `out/csv/`, along with relevant values / statistics printed to the terminal.
 
-This script reproduces Figure 3b\) in the paper, along with relevant supplementary bar plots.
+This script reproduces the violin plot in Figure 3b\) in the paper, along with relevant supplementary bar plots.
 
-### 2. IRC energy barrier for zero-shot + FT42 models for CPD + MVK DA system
+To run this for the other two systems, use `inputs/test/anthracene_DA_FT46_test.yaml` and `inputs/test/guajadial_DA_FT50_test.yaml`.
+
+### 2. IRC energy barrier:
+
+For zero-shot and fine-tuned models for CPD + MVK DA system:
 
 Run: ```rmlt run-reaction-barrier-comparison inputs/CPD_MVK_DA_FT42_IRC.yaml```.
 
@@ -67,11 +70,16 @@ Output figures will be saved in `out/plt/bar_plot/`, and `out/csv/`, along with 
 
 This script reproduces Figure 3c\) in the paper, along with relevant supplementary plots.
 
-### 3.
+To run this for the other systems, use `inputs/test/anthracene_DA_FT46_IRC.yaml`, `inputs/test/anthracene_1_4_DA_FT46_IRC.yaml`, and `inputs/test/guajadial_DA_FT50_IRC.yaml`.
 
-### 4.
+### 3. TS Optimisation + dynamics:
 
-### 5.
+For zero-shot and fine-tuned models for CPD + MVK DA system:
+
+### 4. Pretraining bias analysis:
+
+For CPD + MVK DA system:
+
 
 ## Key Workflows
 
@@ -117,8 +125,8 @@ react_ml_test_public/     # the installable Python package
 ├── helpers/              # library code (import react_ml_test_public.helpers.*)
 └── scripts/              # workflow modules (run via `rmlt <name>`)
 data/                     # runtime data (read relative to the working directory)
-models/
-inputs/
-out/
-testing/
+models/                   # store MLIP models here
+inputs/                   # input YAML files for scripts
+out/                      # runtime outputs stored here
+testing/                  # some additional testing
 ```
