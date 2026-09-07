@@ -248,6 +248,7 @@ def load_data_cache(cache_path: str, hdf5_file: TextIO = None):
             data = np.load(cache_path, allow_pickle=True)
             logger.info(f"Loaded npz data cache from {cache_path}...")
         else:
+            logger.warning(f"NPZ cache file: {cache_path} does not exist, returning None!!!")
             return None
     return data
 

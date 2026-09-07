@@ -651,6 +651,7 @@ if __name__ == "__main__":
         per_element_str = "_per_element" if per_element else ""
         test_sim_fpath = f"{SIMILARITIES_DIR}/{test_name}_{model_name}_mace_desc_cosine_sims{per_element_str}_z=8.npz"
         cache_data = load_data_cache(test_sim_fpath)
+        print(cache_data)
         best_sim_values, best_sim_indices, test_config_lens = cache_data['best_sim_values'].flatten(), cache_data['best_sim_indices'], cache_data['config_lens']
         # test_config_lens = [test_config_lens[i] for i in test_sorted_indices]
         diagnostic_summary_rows.append({

@@ -1,6 +1,5 @@
 *Zone.Identifier
 *.pdf
-*.npz
 *.model
 
 # Python

@@ -73,7 +73,15 @@ To run this for the other systems, use `inputs/test/anthracene_DA_FT46_IRC.yaml`
 
 ### 3. TS Optimisation + dynamics:
 
-For zero-shot and fine-tuned models for CPD + MVK DA system:
+1. TS Optimisation
+
+For fine-tuned models for CPD + MVK DA system:
+
+Run: ```rmlt run-reaction-barrier-comparison inputs/CPD_MVK_DA_FT42_IRC.yaml```.
+
+2. Downhill dynamics
+
+
 
 ### 4. Pretraining bias analysis:
 
