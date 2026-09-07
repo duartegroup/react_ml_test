@@ -3,6 +3,7 @@ Script for evaluating the performance of foundation models on a specified test s
 """
 
 
+import argparse
 import os
 
 # from ase.constraints.constraint import IndexedConstraint
@@ -11,8 +12,8 @@ from time import time
 import torch
 from ase.constraints import FixAtoms
 from ase.io import read
-from react_ml_test_public.helpers.optimisation import dimer_method
 
+from react_ml_test_public.helpers import inputs as rmlt_inputs
 from react_ml_test_public.helpers.dynamics import get_trajectory_with_ase
 from react_ml_test_public.helpers.io import get_name_from_path, load_model_calculator
 from react_ml_test_public.helpers.logging import logger
@@ -36,6 +37,40 @@ CUDA_DEVICE = f"cuda:{CUDA_DEVICE_NUM}"
 if torch.cuda.is_available():
     torch.cuda.set_device(CUDA_DEVICE_NUM)
 
+
+def build_ft_model_names(base_model_names: list,
+                         system_ft_name: str,
+                         n: int,
+                         sample_str: str,
+                         energy_str: str,
+                         rep_num: int,
+                         omol_energy_str: str,
+                         omol_rep_num: int):
+    """Build the fine-tuned ``model_names`` and short ``formatted_model_names`` for a run.
+
+    Each base model is assumed to have been fine-tuned on ``{system_ft_name}_{n}`` with the
+    given sampling / energy / repetition naming, i.e.:
+
+        model_names:          <base>_<system_ft_name>_<n>_config_strat_<sample_str>fine_tuned_<energy_str>rep_<rep_num>
+        formatted_model_names: <label>_<system_ft_name>_<n>_config_<energy_str><sample_str>ft
+
+    ``MACE-omol-0-extra-large-1024`` uses its own (``omol_*``) energy / repetition labels. The
+    formatted labels are the compact names used in trajectory / output names (with
+    ``MACE-OFF23_medium`` shortened to ``MACE-OFF23``).
+    """
+    model_names, formatted_model_names = [], []
+    for base_model_name in base_model_names:
+        is_omol = base_model_name == "MACE-omol-0-extra-large-1024"
+        ft_energy_str = omol_energy_str if is_omol else energy_str
+        ft_rep_num = omol_rep_num if is_omol else rep_num
+        model_names.append(f"{base_model_name}_{system_ft_name}_{n}_config_strat_"
+                           f"{sample_str}fine_tuned_{ft_energy_str}rep_{ft_rep_num}")
+        formatted_stem = "MACE-OFF23" if base_model_name == "MACE-OFF23_medium" else base_model_name
+        formatted_model_names.append(f"{formatted_stem}_{system_ft_name}_{n}_config_"
+                                     f"{ft_energy_str}{sample_str}ft")
+    return model_names, formatted_model_names
+
+
 def run_md_eval(init_configs: list,
                 md_config: MDSettings,
                 md_runs_per_config: int,
@@ -44,7 +79,8 @@ def run_md_eval(init_configs: list,
                 system_name: str,
                 constraint: str = None,# IndexedConstraint = None,
                 enable_cueq: bool = False,
-                override_saved: bool = False):
+                override_saved: bool = False,
+                cuda_device: str = CUDA_DEVICE):
 
     trajectories = []
     for i in range(len(init_configs)):
@@ -65,11 +101,11 @@ def run_md_eval(init_configs: list,
                 continue
 
             trajectory = get_trajectory_with_ase(init_config,
-                                                 model_name, 
-                                                 md_config, 
+                                                 model_name,
+                                                 md_config,
                                                  traj_name,
                                                  constraint=constraint,
-                                                 cuda_device=CUDA_DEVICE,
+                                                 cuda_device=cuda_device,
                                                  override_cache=override_saved)
             end_time = time()
             md_time = end_time - start_time
@@ -81,6 +117,50 @@ def run_md_eval(init_configs: list,
 
 
 if __name__ == "__main__":
+
+    """Run MLIP MD trajectories starting from each model's optimised TS.
+
+    The path to the input YAML file is given as a single command-line argument:
+
+        rmlt run-mlip-md inputs/md/CPD_MVK_DA_dynamics_vac.yaml
+
+    (or equivalently: python -m react_ml_test_public.scripts.run_mlip_md
+    inputs/md/CPD_MVK_DA_dynamics_vac.yaml)
+
+    Input YAML format (see inputs/md/CPD_MVK_DA_dynamics_vac.yaml for a full example):
+
+    Fields:
+        system_name:          # system name; also prefixes the starting-config filenames.
+        include_solvent:      # true: start from in-solvent-optimised TS, false: vacuum TS.
+        solvent_name:         # solvent used in the starting-config filenames (include_solvent only).
+
+        fs:                   # total simulation time (fs) of each MD run.
+        temp:                 # MD temperature (K).
+        dt:                   # integration time step (fs).
+        interval:             # frame-saving interval (MD steps).
+        md_method:            # MD engine, "ase" / "openmm".
+        num_init_configs:     # number of starting configs loaded from the optimised-TS file.
+        md_runs_per_config:   # number of MD runs per starting config.
+        box_dim:              # optional [x, y, z] box override (default: keep the input cell).
+
+        base_model_names:     # list of base model architectures to run (each fine-tuned).
+        system_ft_name:       # fine-tuning training-set name.
+        n:                    # fine-tuning set size.
+        sample_str:           # sampling-strategy suffix used in fine-tuned names (e.g. "ts_gauss_").
+        energy_str:           # energy label string used in fine-tuned names (e.g. "energy_").
+        rep_num:              # fine-tuned model repetition number.
+        omol_rep_num:         # OMOL model repetition number.
+        omol_energy_str:      # OMOL energy suffix/prefix string.
+
+        enable_cueq:          # use the cuEquivariance MACE speed-up (CUDA 12+).
+        override_saved:       # re-run MD even if a saved trajectory already exists.
+        cuda_device:          # GPU device for the MLIP calculators.
+
+    model_names and formatted_model_names are built in the script from base_model_names and
+    the fine-tuning components above (they are not set in the YAML).
+
+    Any omitted field is set to None (or its documented default).
+    """
 
     constraint = None
 
@@ -104,164 +184,71 @@ if __name__ == "__main__":
     # Check if the tensor is on GPU
     logger.info(f"Tensor device: {tensor.device}")
 
-    # ====== INPUT PARAMETERS HERE ======
+    # input YAML config path from a single command-line argument
+    parser = argparse.ArgumentParser(
+        description="Run MLIP MD trajectories driven by an input YAML config file "
+                    "(format described above).",
+        epilog="Example: rmlt run-mlip-md inputs/md/CPD_MVK_DA_dynamics_vac.yaml",
+    )
+    parser.add_argument(
+        "input_yaml",
+        help="Path to the input YAML config file "
+             "(e.g. inputs/md/CPD_MVK_DA_dynamics_vac.yaml).",
+    )
+    args = parser.parse_args()
 
-    box_dim: list[float] = None
+    # load + process the input YAML (see react_ml_test_public/helpers/inputs.py)
+    resolved = rmlt_inputs.resolve_mlip_md_yaml(args.input_yaml, parser)
 
-    # === SELECT MODELS ===
-    # model_names = ["MACE-OFF23_medium"]
-    # model_names = ["GO-MACE-23"]
+    # === 1. SYSTEM / STARTING CONFIGS ===
+    system_name = resolved["system_name"]
+    include_solvent = resolved["include_solvent"]
+    solvent_name = resolved["solvent_name"]
 
-    # model_names = ["MACE-MP0-128-L0"]
-    # model_names = ["MACE-MP0-128-L1"]
-    # model_names = ["MACE-MP-style_endo_DA_train"]
-    # model_names = ["MACE_mlptrain_style_endo_DA_train"]
+    # === 2. MD SETTINGS ===
+    fs = resolved["fs"]
+    temp = resolved["temp"]
+    dt = resolved["dt"]
+    interval = resolved["interval"]
+    md_method = resolved["md_method"]
+    num_init_configs = resolved["num_init_configs"]
+    md_runs_per_config = resolved["md_runs_per_config"]
+    box_dim = resolved["box_dim"]
 
-    # model_names = ["ani_1xnr"]
-    # model_names = ["MACE-OFF23_medium_endo_DA_1.0_train_from_scratch"] 
-    # model_names = ["MACE-OFF23_medium_endo_DA_1.0_train_fine_tuned"] 
-    # save_name = model_names[0]
+    # === 3. MODELS (fine-tuned naming components -> model_names / formatted_model_names) ===
+    base_model_names = resolved["base_model_names"]
+    system_ft_name = resolved["system_ft_name"]
+    n = resolved["n"]
+    sample_str = resolved["sample_str"]
+    energy_str = resolved["energy_str"]
+    rep_num = resolved["rep_num"]
+    omol_rep_num = resolved["omol_rep_num"]
+    omol_energy_str = resolved["omol_energy_str"]
 
-    # single good model test
-    # model_names = [
-    #                'MACE-OFF23_medium_endo_DA_train_random_20_config_fine_tuned_rep_1',
-    #                'GO-MACE-23_endo_DA_train_random_20_config_fine_tuned_rep_1',
-    #                ]
+    # === 4. RUN OPTIONS ===
+    enable_cueq = resolved["enable_cueq"]
+    override_saved = resolved["override_saved"]
+    cuda_device = resolved["cuda_device"]
+    del resolved
 
-    # good models
-    # with open(f'{DATA_DIR}/good_models.txt') as model_spec:
-    #     model_names = [line.strip() for line in model_spec]
-    # save_name = 'good_models'
+    md_config = MDSettings(fs=fs, temp=temp, dt=dt, interval=interval, md_method=md_method)
+    model_names, formatted_model_names = build_ft_model_names(base_model_names,
+                                                              system_ft_name,
+                                                              n,
+                                                              sample_str,
+                                                              energy_str,
+                                                              rep_num,
+                                                              omol_energy_str,
+                                                              omol_rep_num)
+    logger.info(f'Evaluating models: {model_names}')
 
-    # --- paper zero-shot ---
-    # model_names = [
-    #                "GO-MACE-23",
-    #                "MACE-OFF23_medium", 
-    #                "MACE-MP-0b3_medium",
-    #               ]
-    # formatted_model_names = model_names
-
-    # --- paper extended zero shot ---
-    # model_names = [
-    #     # 'GO-MACE-23', 
-    #     # 'MACE-OFF23_medium', 
-    #     # 'MACE-MP-0b3_medium',
-    #     # 'EGRET_1T', 
-    #     'ani-1xnr',
-    #     'MACE-NEB',
-    #     # 'MACE-ANI-CC',
-    #     # "MACE-OFF23_medium_CPD_MVK_DA_train_42_config_strat_ts_gauss_fine_tuned_energy_rep_1",
-    #     # 'MACE-omol-0-extra-large-1024',
-    # ]
-    # formatted_model_names = model_names
-
-    # --- single shot ts ---
-    # model_names = [
-    #                "MACE-OFF23_medium_endo_DA_vac_TS_wB97M_fine_tuned_rep_1",
-    #                "GO-MACE-23_endo_DA_vac_TS_wB97M_fine_tuned_rep_1",
-    #                "MACE-MP0-128-L1_endo_DA_vac_TS_wB97M_fine_tuned_rep_1",
-    #               ]
-
-    # --- selected fine-tuned models (with best selected replicates) ---
-    n, system_ft_name, rep_num, omol_rep_num, omol_energy_str = 42, "CPD_MVK_DA_train", 1, 1, 'energy_'
-    # n, system_ft_name, rep_num, omol_rep_num, omol_energy_str = 46, "anthracene_DA_train", 2, 3, 'energy_'
-    # n, system_ft_name, rep_num, omol_rep_num, omol_energy_str = 50, "guajadial_DA_train", 1, 1, ''
-    energy_corrected = True
-    # sample_str = ''
-    sample_str = 'ts_gauss_'
-
-    energy_str = 'energy_' if energy_corrected else ''
-    model_names = [
-                   f"GO-MACE-23_{system_ft_name}_{n}_config_strat_{sample_str}fine_tuned_{energy_str}rep_{rep_num}",
-                #    f"MACE-OFF23_medium_{system_ft_name}_{n}_config_strat_{sample_str}fine_tuned_{energy_str}rep_{rep_num}", 
-                #    f"MACE-MP-0b3_medium_{system_ft_name}_{n}_config_strat_{sample_str}fine_tuned_{energy_str}rep_{rep_num}",
-                #    f"MACE-omol-0-extra-large-1024",
-                #    f"MACE-omol-0-extra-large-1024_{system_ft_name}_{n}_config_strat_{sample_str}fine_tuned_{omol_energy_str}rep_{omol_rep_num}",
-                  ]
-
-    formatted_model_names = [
-        f'GO-MACE-23_{system_ft_name}_{n}_config_{energy_str}{sample_str}ft', 
-        # f'MACE-OFF23_{system_ft_name}_{n}_config_{energy_str}{sample_str}ft', 
-        # f'MACE-MP-0b3_medium_{system_ft_name}_{n}_config_{energy_str}{sample_str}ft',
-        # f"MACE-omol-0-extra-large-1024",
-        # f'MACE-omol-0-extra-large-1024_{system_ft_name}_{n}_config_{omol_energy_str}{sample_str}ft'
-    ]
-
-    # extra sample models
-    # model_names = [
-    #              f"GO-MACE-23_{system_ft_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_{energy_str}rep_{rep_num}",
-    #             #  f"MACE-OFF23_medium_{system_ft_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_{energy_str}rep_{rep_num}",
-    #              # f"MACE-MP-0b3_medium_{system_ft_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_{energy_str}rep_{rep_num}",
-    #             ]
-    
-    # formatted_model_names = [
-    #     f'GO-MACE-23_{system_ft_name}_{n}_config_w_1_4_vac_sample_{energy_str}ft', 
-    #     # f'MACE-OFF23_{system_ft_name}_{n}_config_w_1_4_vac_sample_{energy_str}ft', 
-    #     # f'MACE-MP-0b3_medium_{system_ft_name}_{n}_config_w_1_4_vac_sample_{energy_str}ft',
-    # ]
-
-    # --- fully fine-tuned (positive control) paper models ---
-    # energy_corrected = True
-    # system_ft_name = "CPD_MVK_DA_train"
-
-    # energy_str = 'energy_' if energy_corrected else ''
-    # model_names = [
-    #             #   f"GO-MACE-23_{system_ft_name}_fine_tuned_{energy_str}rep_1",
-    #             #   f"MACE-OFF23_medium_{system_ft_name}_fine_tuned_{energy_str}rep_1",
-    #             #   f"MACE-MP0-128-L1_{system_ft_name}_fine_tuned_{energy_str}rep_1",
-    #               f"MACE-MP-0b3_medium_{system_ft_name}_fine_tuned_{energy_str}rep_1",
-    #               ]
-    # energy_str = 'energy' if energy_corrected else ''
-    # formatted_model_names = [
-    #                         #  f'GO-MACE-23_{system_ft_name}_full_ft_{energy_str}', 
-    #                         #  f'MACE-OFF23_{system_ft_name}_full_ft_{energy_str}', 
-    #                         #  f'MACE-MP0-128-L1_{system_ft_name}_full_ft_{energy_str}',
-    #                          f'MACE-MP-0b3_medium_{system_ft_name}_full_ft_{energy_str}'
-    #                         ]
-
-    # # full zero-shot model comparison
-    # model_names = list(MODELS[5:])
-    # model_names += ["MACE-OFF23_medium_endo_DA_1.0_train_from_scratch"]  # use medium mace off model architecture trained on full dataset as a from scratch reference
-    # save_name = "zero_shot_models"
-
-    # === SELECT INPUT GEOMETRY ===
-
-    system_name, num_solute_atoms, solvent_name, fs = "CPD_MVK_DA", 22, 'water', 1000
-    # system_name, num_solute_atoms, solvent_name, fs = "anthracene_DA", 41, 'toluene', 1000
-    # system_name, num_solute_atoms, solvent_name, fs = "anthracene_1_4_DA", 41, 'toluene', 1000
-    # system_name, num_solute_atoms, solvent_name, fs = "guajadial", 69, 'water', 2000 #4000  # 2000
-    # system_name, num_solute_atoms, solvent_name, fs = "guajadial_DA", 69, 'water', 1000 # 4000 
-
-    # --- vacuum traj ---
-    # md_config = MDSettings(fs=fs, temp=300, dt=0.5, interval=20, md_method='ase')
-    # num_init_configs = 1    # number of initial configurations to load from the starting config .xyz file
-    # md_runs_per_config = 100
-    # init_config_set_fpaths, formatted_system_names = [f"{OPT_DIR}/{system_name}_vac_{model_name}_opt_TS.xyz" for model_name in model_names], \
-    #                                                  [f"{system_name}_vac_opt_TS" for _ in model_names]    # use model optimised vac TS
-
-    # --- solvent traj ---
-    md_config = MDSettings(fs=fs, temp=300, dt=0.5, interval=20, md_method='ase')
-    num_init_configs = 1    # number of initial configurations to load from the starting config .xyz file
-    md_runs_per_config = 100
-    init_config_set_fpaths, formatted_system_names = [f"{OPT_DIR}/{system_name}_in_{solvent_name}_{model_name}_opt_TS.xyz" for model_name in model_names], \
-        [f"{system_name}_{solvent_name}_opt_TS" for _ in model_names]
-
-    # --- long solvent traj with fixed solute ---
-    
-    # set optimised TS in solvent
-    # init_config_set_fpaths, formatted_system_names = [f"{OPT_DIR}/{system_name}_in_{solvent_name}_{model_name}_opt_TS.xyz" for model_name in model_names], \
-    #     [f"{system_name}_{solvent_name}_opt_TS_fixed_solute" for _ in model_names]
-
-    # solute_indices = set(range(num_solute_atoms))
-    # num_atoms = len(read(init_config_set_fpaths[0], ':')[0])
-    # constraint = FixAtoms(mask=[i in solute_indices for i in range(num_atoms)])
-    # md_config = MDSettings(fs=100*PS, temp=300, dt=0.5, interval=100, md_method='ase')
-    # num_init_configs = 1
-    # md_runs_per_config = 1
-
-    # === SPECIFY OTHER RUN OPTIONS ===
-    enable_cueq = False
-    override_saved = False
+    # === 5. INIT CONFIG SET (OPTIMISED TS PER MODEL) ===
+    if include_solvent:
+        init_config_set_fpaths = [f"{OPT_DIR}/{system_name}_in_{solvent_name}_{model_name}_opt_TS.xyz" for model_name in model_names]
+        formatted_system_names = [f"{system_name}_{solvent_name}_opt_TS" for _ in model_names]
+    else:
+        init_config_set_fpaths = [f"{OPT_DIR}/{system_name}_vac_{model_name}_opt_TS.xyz" for model_name in model_names]
+        formatted_system_names = [f"{system_name}_vac_opt_TS" for _ in model_names]
 
     # ====================================================
 
@@ -291,5 +278,5 @@ if __name__ == "__main__":
                                    formatted_system_name,
                                    constraint=constraint,
                                    enable_cueq=enable_cueq,
-                                   override_saved=override_saved)
-        
+                                   override_saved=override_saved,
+                                   cuda_device=cuda_device)

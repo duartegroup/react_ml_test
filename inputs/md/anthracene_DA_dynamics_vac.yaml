@@ -1,0 +1,41 @@
+# run_mlip_md.py input YAML - anthracene_DA MLIP MD dynamics in vacuum.
+# Runs MD trajectories starting from each model's vacuum-optimised TS
+# (out/opt/anthracene_DA_vac_<model>_opt_TS.xyz).
+#
+# Run with:
+#   rmlt run-mlip-md inputs/md/anthracene_DA_dynamics_vac.yaml
+#
+# Paths are relative to the repository root.
+
+# === 1. SYSTEM / STARTING CONFIGS ===
+system_name: anthracene_DA
+include_solvent: false        # true: start from the in-solvent-optimised TS of each model
+solvent_name: toluene         # only used when include_solvent: true
+
+# === 2. MD SETTINGS ===
+fs: 1000
+temp: 300
+dt: 0.5
+interval: 20
+md_method: "ase"
+num_init_configs: 1
+md_runs_per_config: 100
+
+# === 3. MODELS (fine-tuned; base_model_names + naming components below) ===
+base_model_names:
+  - GO-MACE-23
+  - MACE-OFF23_medium
+  - MACE-MP-0b3_medium
+  - MACE-omol-0-extra-large-1024
+system_ft_name: anthracene_DA_train
+n: 46
+sample_str: ""
+energy_str: "energy_"
+rep_num: 2
+omol_rep_num: 3
+omol_energy_str: "energy_"
+
+# === 4. RUN OPTIONS ===
+enable_cueq: false
+override_saved: false
+cuda_device: "cuda:0"

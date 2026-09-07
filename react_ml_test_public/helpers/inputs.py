@@ -8,6 +8,7 @@ function in this module that takes in and processes the YAML for that script:
     resolve_pretrain_bias_analysis_yaml(...)       -> run_pretrain_bias_analysis.py
     resolve_reaction_barrier_comparison_yaml(...)  -> run_reaction_barrier_comparison.py
     resolve_mlip_ts_opt_yaml(...)                  -> run_mlip_ts_opt.py
+    resolve_mlip_md_yaml(...)                      -> run_mlip_md.py
 
 Each function performs the shared file checks / parsing / ``${var}`` substitution
 (via ``_load_yaml_config``) followed by that script's own field resolution and
@@ -528,5 +529,97 @@ def resolve_mlip_ts_opt_yaml(input_yaml_fpath: str, parser=None):
         "displace_mag": displace_mag,
         "enable_cueq": enable_cueq,
         "override_cache": override_cache,
+        "cuda_device": cuda_device,
+    }
+
+
+def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
+    """Load + process the input YAML for run_mlip_md.py.
+
+    The YAML specifies the test system / starting configs, MD settings, the set of
+    fine-tuned models (given as base model names + fine-tuning naming components; the
+    script builds the full ``model_names`` and ``formatted_model_names`` from these) and
+    the remaining run options. Returns a flat dict of the config variables that the
+    script's ``__main__`` declares.
+    """
+    input_config = _load_yaml_config(input_yaml_fpath, parser)
+
+    def _need(key):
+        value = input_config.get(key, None)
+        if value is None:
+            _error(parser, f"Missing required field '{key}' in input YAML.")
+        return value
+
+    def _parse_box_dim(value):
+        if value is None:
+            return None
+        try:
+            value = [float(x) for x in value]
+        except (TypeError, ValueError):
+            _error(parser, "'box_dim' must be a list of 3 box lengths in Angstrom.")
+        if len(value) != 3:
+            _error(parser, "'box_dim' must be a list of 3 box lengths in Angstrom.")
+        return value
+
+    # ===== system / starting configs =====
+    system_name = str(_need("system_name"))
+    include_solvent = _as_bool(input_config.get("include_solvent", False), default=False)
+    if include_solvent:
+        solvent_name = str(_need("solvent_name"))
+    else:
+        solvent_name = None
+
+    # ===== MD settings =====
+    fs = int(input_config.get("fs", 1000))
+    temp = int(input_config.get("temp", 300))
+    dt = float(input_config.get("dt", 0.5))
+    interval = int(input_config.get("interval", 20))
+    md_method = str(input_config.get("md_method", "ase"))
+    if md_method not in ("ase", "openmm"):
+        _error(parser, f"Unrecognised md_method: {md_method!r} (choose from 'ase' / 'openmm').")
+    num_init_configs = int(input_config.get("num_init_configs", 1))
+    md_runs_per_config = int(input_config.get("md_runs_per_config", 1))
+    box_dim = _parse_box_dim(input_config.get("box_dim", None))
+
+    # ===== models (fine-tuned naming components) =====
+    base_model_names = _need("base_model_names")
+    if not isinstance(base_model_names, list) or not base_model_names:
+        _error(parser, "'base_model_names' must be a non-empty list of base model names "
+                       "in the input YAML.")
+    system_ft_name = str(_need("system_ft_name"))
+    n = int(_need("n"))
+    sample_str = str(input_config.get("sample_str", "") or "")
+    energy_str = str(input_config.get("energy_str", "energy_") or "")
+    rep_num = int(input_config.get("rep_num", 1))
+    omol_rep_num = int(input_config.get("omol_rep_num", 1))
+    omol_energy_str = str(input_config.get("omol_energy_str", "energy_") or "")
+
+    # ===== run options =====
+    enable_cueq = _as_bool(input_config.get("enable_cueq", False), default=False)
+    override_saved = _as_bool(input_config.get("override_saved", False), default=False)
+    cuda_device = str(input_config.get("cuda_device", "cuda:0"))
+
+    return {
+        "system_name": system_name,
+        "include_solvent": include_solvent,
+        "solvent_name": solvent_name,
+        "fs": fs,
+        "temp": temp,
+        "dt": dt,
+        "interval": interval,
+        "md_method": md_method,
+        "num_init_configs": num_init_configs,
+        "md_runs_per_config": md_runs_per_config,
+        "box_dim": box_dim,
+        "base_model_names": base_model_names,
+        "system_ft_name": system_ft_name,
+        "n": n,
+        "sample_str": sample_str,
+        "energy_str": energy_str,
+        "rep_num": rep_num,
+        "omol_rep_num": omol_rep_num,
+        "omol_energy_str": omol_energy_str,
+        "enable_cueq": enable_cueq,
+        "override_saved": override_saved,
         "cuda_device": cuda_device,
     }
