@@ -1,0 +1,44 @@
+# run_trajectory_analysis.py input YAML - anthracene_DA trajectory analysis (MD in toluene).
+# Analyses the MD trajectories produced by run_mlip_md.py from
+# inputs/md/anthracene_DA_dynamics_in_solvent.yaml, i.e. out/trj/anthracene_DA_toluene_opt_TS_<model>_300K_1.0ps*.
+#
+# Run with:
+#   rmlt run-trajectory-analysis inputs/trj_analysis/anthracene_DA_trj_analysis_in_solvent.yaml
+
+# === 1. TRAJECTORY SOURCE ===
+traj_type: anthracene_DA_toluene_opt_TS
+run_name: "300K_1.0ps"
+ts_ref_fp: data/reaction_data/anthracene_DA/TS/anthracene_DA_TS_opt_SMD_toluene_wB97M.xyz
+
+# === 2. REACTION COORDINATE / PRODUCT CONFIG DEFINITIONS ===
+num_solute_atoms: 41
+threshold: 1.8
+r1_atoms: [2, 20]
+r2_atoms: [5, 22]
+# the first config_def is the reactant definition (used for trajectory truncation)
+config_defs:
+  - {name: R, r1: false, r2: false}
+  - {name: P, r1: true, r2: true}
+
+# === 3. MODELS (trajectory-name labels; must match the run_mlip_md config used) ===
+system_ft_name: anthracene_DA_train
+n: 46
+sample_str: ""
+energy_str: "energy_"
+omol_energy_str: "energy_"
+model_names:
+  - GO-MACE-23
+  - GO-MACE-23_${system_ft_name}_${n}_config_${energy_str}${sample_str}ft
+  - MACE-OFF23_medium
+  - MACE-OFF23_${system_ft_name}_${n}_config_${energy_str}${sample_str}ft
+  - MACE-MP-0b3_medium
+  - MACE-MP-0b3_medium_${system_ft_name}_${n}_config_${energy_str}${sample_str}ft
+  - MACE-omol-0-extra-large-1024
+  - MACE-omol-0-extra-large-1024_${system_ft_name}_${n}_config_${omol_energy_str}${sample_str}ft
+
+# === 4. PLOT SETTINGS ===
+save_name: anthracene_DA_toluene_opt_TS_paper_models
+traj_trunc: [3.5, 3.5]
+r1_range: [4.0, 1.0]
+r2_range: [5.0, 1.0]
+show_legend: false

@@ -9,6 +9,7 @@ function in this module that takes in and processes the YAML for that script:
     resolve_reaction_barrier_comparison_yaml(...)  -> run_reaction_barrier_comparison.py
     resolve_mlip_ts_opt_yaml(...)                  -> run_mlip_ts_opt.py
     resolve_mlip_md_yaml(...)                      -> run_mlip_md.py
+    resolve_trajectory_analysis_yaml(...)          -> run_trajectory_analysis.py
 
 Each function performs the shared file checks / parsing / ``${var}`` substitution
 (via ``_load_yaml_config``) followed by that script's own field resolution and
@@ -37,6 +38,7 @@ from react_ml_test_public.helpers.settings import (
     MEV_PER_ATOM,
     OPT_DIR,
     PAPER_MODEL_COLOURS,
+    TRAJ_DIR,
 )
 
 
@@ -626,4 +628,124 @@ def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
         "enable_cueq": enable_cueq,
         "override_saved": override_saved,
         "cuda_device": cuda_device,
+    }
+
+
+def resolve_trajectory_analysis_yaml(input_yaml_fpath: str, parser=None):
+    """Load + process the input YAML for run_trajectory_analysis.py.
+
+    The YAML specifies the trajectory set to analyse (from run_mlip_md.py output), the
+    reaction-coordinate atom pairs + product / reactant ``config_defs`` used to classify
+    final frames, the model labels (trajectory-name stubs) to plot and the plot settings.
+    Returns a flat dict of the config variables that the script's ``__main__`` declares.
+    """
+    input_config = _load_yaml_config(input_yaml_fpath, parser)
+
+    def _need(key):
+        value = input_config.get(key, None)
+        if value is None:
+            _error(parser, f"Missing required field '{key}' in input YAML.")
+        return value
+
+    def _parse_pair(key):
+        value = _need(key)
+        try:
+            pair = tuple(int(x) for x in value)
+        except (TypeError, ValueError):
+            _error(parser, f"'{key}' must be a pair of atom indices [i, j].")
+        if len(pair) != 2:
+            _error(parser, f"'{key}' must be a pair of atom indices [i, j].")
+        return pair
+
+    def _parse_range(value, key="traj_trunc / ranges"):
+        if value is None:
+            return None
+        try:
+            value = [float(x) for x in value]
+        except (TypeError, ValueError):
+            _error(parser, f"'{key}' must be a [lo, hi] pair.")
+        if len(value) != 2:
+            _error(parser, f"'{key}' must be a [lo, hi] pair.")
+        return tuple(value)
+
+    # ===== trajectory source (run_mlip_md.py output) =====
+    traj_dir = str(input_config.get("traj_dir", "") or TRAJ_DIR)
+    traj_type = str(_need("traj_type"))
+    run_name = str(_need("run_name"))
+    ts_ref_fp = str(_need("ts_ref_fp"))
+
+    # ===== reaction coordinate / config definitions =====
+    num_solute_atoms = int(_need("num_solute_atoms"))
+    threshold = float(_need("threshold"))
+    r1_atoms = _parse_pair("r1_atoms")
+    r2_atoms = _parse_pair("r2_atoms")
+    r3_atoms = _parse_pair("r3_atoms") if input_config.get("r3_atoms", None) is not None else None
+    r_atom_pairs = {"r1": r1_atoms, "r2": r2_atoms, "r3": r3_atoms}
+
+    config_defs_raw = _need("config_defs")
+    if not isinstance(config_defs_raw, list) or not config_defs_raw:
+        _error(parser, "'config_defs' must be a non-empty list of reactant / product "
+                       "config definitions (each with a 'name' and 'r1'/'r2'/'r3' flags).")
+    config_defs = []
+    for spec in config_defs_raw:
+        if not isinstance(spec, dict) or not spec.get("name"):
+            _error(parser, "Each entry of 'config_defs' must be a mapping with a 'name' "
+                           "and 'r1'/'r2'/'r3' bond flags.")
+        name = str(spec["name"])
+        bonds = []
+        for r_key, r_pair in r_atom_pairs.items():
+            if spec.get(r_key) is None:
+                continue
+            if r_pair is None:
+                _error(parser, f"config_def '{name}' references '{r_key}' but "
+                               f"'{r_key}_atoms' is not set in the input YAML.")
+            bonds.append((r_pair, bool(spec[r_key])))
+        if not bonds:
+            _error(parser, f"config_def '{name}' must define at least one bond flag.")
+        config_defs.append({"name": name, "bonds": bonds})
+
+    # ===== models (trajectory-name labels, supporting ${var} templating) =====
+    model_names = _need("model_names")
+    if not isinstance(model_names, list) or not model_names:
+        _error(parser, "'model_names' must be a non-empty list of trajectory model labels "
+                       "in the input YAML.")
+    if any("${" in str(model_name) for model_name in model_names):
+        _error(parser, "Unresolved '${var}' reference(s) in 'model_names'; define the "
+                       "referenced variable(s) in the input YAML.")
+    system_ft_name = str(input_config.get("system_ft_name", "") or "")
+    n = input_config.get("n", None)
+    n = int(n) if n is not None else None
+    sample_str = str(input_config.get("sample_str", "") or "")
+    energy_str = str(input_config.get("energy_str", "energy_") or "")
+    omol_energy_str = str(input_config.get("omol_energy_str", "energy_") or "")
+
+    # ===== plot settings =====
+    save_name = str(_need("save_name"))
+    traj_trunc = _parse_range(input_config.get("traj_trunc", None))
+    r1_range = _parse_range(input_config.get("r1_range", None))
+    r2_range = _parse_range(input_config.get("r2_range", None))
+    show_legend = _as_bool(input_config.get("show_legend", False), default=False)
+
+    return {
+        "traj_dir": traj_dir,
+        "traj_type": traj_type,
+        "run_name": run_name,
+        "ts_ref_fp": ts_ref_fp,
+        "num_solute_atoms": num_solute_atoms,
+        "threshold": threshold,
+        "r1_atoms": r1_atoms,
+        "r2_atoms": r2_atoms,
+        "r3_atoms": r3_atoms,
+        "config_defs": config_defs,
+        "model_names": model_names,
+        "system_ft_name": system_ft_name,
+        "n": n,
+        "sample_str": sample_str,
+        "energy_str": energy_str,
+        "omol_energy_str": omol_energy_str,
+        "save_name": save_name,
+        "traj_trunc": traj_trunc,
+        "r1_range": r1_range,
+        "r2_range": r2_range,
+        "show_legend": show_legend,
     }

@@ -1,0 +1,44 @@
+# run_trajectory_analysis.py input YAML - guajadial_DA trajectory analysis (vacuum MD).
+# Analyses the MD trajectories produced by run_mlip_md.py from
+# inputs/md/guajadial_DA_dynamics_vac.yaml, i.e. out/trj/guajadial_DA_vac_opt_TS_<model>_300K_1.0ps*.
+#
+# Run with:
+#   rmlt run-trajectory-analysis inputs/trj_analysis/guajadial_DA_trj_analysis_vac.yaml
+
+# === 1. TRAJECTORY SOURCE ===
+traj_type: guajadial_DA_vac_opt_TS
+run_name: "300K_1.0ps"
+ts_ref_fp: data/reaction_data/guajadial_DA/TS/guajadial_DA_vac_TS_wB97M.xyz
+
+# === 2. REACTION COORDINATE / PRODUCT CONFIG DEFINITIONS ===
+num_solute_atoms: 69
+threshold: 1.8
+r1_atoms: [13, 31]
+r2_atoms: [6, 32]
+# the first config_def is the reactant definition (used for trajectory truncation)
+config_defs:
+  - {name: R, r1: false, r2: false}
+  - {name: P, r1: true, r2: true}
+
+# === 3. MODELS (trajectory-name labels; must match the run_mlip_md config used) ===
+system_ft_name: guajadial_DA_train
+n: 50
+sample_str: ""
+energy_str: "energy_"
+omol_energy_str: ""
+model_names:
+  - GO-MACE-23
+  - GO-MACE-23_${system_ft_name}_${n}_config_${energy_str}${sample_str}ft
+  - MACE-OFF23_medium
+  - MACE-OFF23_${system_ft_name}_${n}_config_${energy_str}${sample_str}ft
+  - MACE-MP-0b3_medium
+  - MACE-MP-0b3_medium_${system_ft_name}_${n}_config_${energy_str}${sample_str}ft
+  - MACE-omol-0-extra-large-1024
+  - MACE-omol-0-extra-large-1024_${system_ft_name}_${n}_config_${omol_energy_str}${sample_str}ft
+
+# === 4. PLOT SETTINGS ===
+save_name: guajadial_DA_vac_opt_TS_paper_models
+traj_trunc: [3.5, 3.5]
+r1_range: [4.0, 1.0]
+r2_range: [5.0, 1.0]
+show_legend: false
