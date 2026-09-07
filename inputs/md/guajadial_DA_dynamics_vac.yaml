@@ -19,14 +19,18 @@ dt: 0.5
 interval: 20
 md_method: "ase"
 num_init_configs: 1
-md_runs_per_config: 100
+md_runs_per_config: 10
 
-# === 3. MODELS (fine-tuned; base_model_names + naming components below) ===
-base_model_names:
+# === 3. MODELS (zero-shot + fine-tuned; naming components used by the ${...} templating) ===
+model_names:
   - GO-MACE-23
+  - GO-MACE-23_${system_ft_name}_${n}_config_strat_${sample_str}fine_tuned_${energy_str}rep_${rep_num}
   - MACE-OFF23_medium
+  - MACE-OFF23_medium_${system_ft_name}_${n}_config_strat_${sample_str}fine_tuned_${energy_str}rep_${rep_num}
   - MACE-MP-0b3_medium
+  - MACE-MP-0b3_medium_${system_ft_name}_${n}_config_strat_${sample_str}fine_tuned_${energy_str}rep_${rep_num}
   - MACE-omol-0-extra-large-1024
+  - MACE-omol-0-extra-large-1024_${system_ft_name}_${n}_config_strat_${sample_str}fine_tuned_${omol_energy_str}rep_${omol_rep_num}
 system_ft_name: guajadial_DA_train
 n: 50
 sample_str: ""

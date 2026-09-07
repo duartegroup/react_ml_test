@@ -15,7 +15,11 @@ from ase.io import read
 
 from react_ml_test_public.helpers import inputs as rmlt_inputs
 from react_ml_test_public.helpers.dynamics import get_trajectory_with_ase
-from react_ml_test_public.helpers.io import get_name_from_path, load_model_calculator
+from react_ml_test_public.helpers.io import (
+    check_cuda_setup,
+    get_name_from_path,
+    load_model_calculator,
+)
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.settings import (
     CPD_MVK_DA_DATA_DIR,
@@ -36,39 +40,6 @@ CUDA_DEVICE = f"cuda:{CUDA_DEVICE_NUM}"
 
 if torch.cuda.is_available():
     torch.cuda.set_device(CUDA_DEVICE_NUM)
-
-
-def build_ft_model_names(base_model_names: list,
-                         system_ft_name: str,
-                         n: int,
-                         sample_str: str,
-                         energy_str: str,
-                         rep_num: int,
-                         omol_energy_str: str,
-                         omol_rep_num: int):
-    """Build the fine-tuned ``model_names`` and short ``formatted_model_names`` for a run.
-
-    Each base model is assumed to have been fine-tuned on ``{system_ft_name}_{n}`` with the
-    given sampling / energy / repetition naming, i.e.:
-
-        model_names:          <base>_<system_ft_name>_<n>_config_strat_<sample_str>fine_tuned_<energy_str>rep_<rep_num>
-        formatted_model_names: <label>_<system_ft_name>_<n>_config_<energy_str><sample_str>ft
-
-    ``MACE-omol-0-extra-large-1024`` uses its own (``omol_*``) energy / repetition labels. The
-    formatted labels are the compact names used in trajectory / output names (with
-    ``MACE-OFF23_medium`` shortened to ``MACE-OFF23``).
-    """
-    model_names, formatted_model_names = [], []
-    for base_model_name in base_model_names:
-        is_omol = base_model_name == "MACE-omol-0-extra-large-1024"
-        ft_energy_str = omol_energy_str if is_omol else energy_str
-        ft_rep_num = omol_rep_num if is_omol else rep_num
-        model_names.append(f"{base_model_name}_{system_ft_name}_{n}_config_strat_"
-                           f"{sample_str}fine_tuned_{ft_energy_str}rep_{ft_rep_num}")
-        formatted_stem = "MACE-OFF23" if base_model_name == "MACE-OFF23_medium" else base_model_name
-        formatted_model_names.append(f"{formatted_stem}_{system_ft_name}_{n}_config_"
-                                     f"{ft_energy_str}{sample_str}ft")
-    return model_names, formatted_model_names
 
 
 def run_md_eval(init_configs: list,
@@ -143,8 +114,8 @@ if __name__ == "__main__":
         md_runs_per_config:   # number of MD runs per starting config.
         box_dim:              # optional [x, y, z] box override (default: keep the input cell).
 
-        base_model_names:     # list of base model architectures to run (each fine-tuned).
-        system_ft_name:       # fine-tuning training-set name.
+        model_names:          # list of model names to run (supports ${var} templating).
+        system_ft_name:       # fine-tuning training-set name (for model-name templating).
         n:                    # fine-tuning set size.
         sample_str:           # sampling-strategy suffix used in fine-tuned names (e.g. "ts_gauss_").
         energy_str:           # energy label string used in fine-tuned names (e.g. "energy_").
@@ -156,33 +127,17 @@ if __name__ == "__main__":
         override_saved:       # re-run MD even if a saved trajectory already exists.
         cuda_device:          # GPU device for the MLIP calculators.
 
-    model_names and formatted_model_names are built in the script from base_model_names and
-    the fine-tuning components above (they are not set in the YAML).
+    formatted_model_names are built in the script: fine-tuned entries of this training set get
+    a compact "<label>_<system_ft_name>_<n>_config_<energy><sample_str>ft" label, other entries
+    (e.g. zero-shot models) keep their model name.
 
     Any omitted field is set to None (or its documented default).
     """
 
     constraint = None
 
-    # TODO: add this to a seperate function!!!
-    # check if correct device is configured in pytorch
-    # Check if CUDA is available
-    cuda_available = torch.cuda.is_available()
-    logger.info(f"CUDA is available: {cuda_available}")
-
-    # Check the default device
-    if cuda_available:
-        logger.info(f"Current device: {torch.cuda.current_device()}")
-        logger.info(f"Device name: {torch.cuda.get_device_name(torch.cuda.current_device())}")
-    else:
-        logger.info("CUDA is not available.")
-
-    # Create a tensor and move it to the GPU if available
-    device = torch.device(CUDA_DEVICE if cuda_available else "cpu")
-    tensor = torch.tensor([1.0, 2.0, 3.0]).to(device)
-
-    # Check if the tensor is on GPU
-    logger.info(f"Tensor device: {tensor.device}")
+    # sanity check / logging of the configured CUDA device (see helpers/io.py)
+    check_cuda_setup(CUDA_DEVICE)
 
     # input YAML config path from a single command-line argument
     parser = argparse.ArgumentParser(
@@ -215,8 +170,8 @@ if __name__ == "__main__":
     md_runs_per_config = resolved["md_runs_per_config"]
     box_dim = resolved["box_dim"]
 
-    # === 3. MODELS (fine-tuned naming components -> model_names / formatted_model_names) ===
-    base_model_names = resolved["base_model_names"]
+    # === 3. MODELS (model_names list; fine-tuning naming components for ${...} templating) ===
+    model_names = resolved["model_names"]
     system_ft_name = resolved["system_ft_name"]
     n = resolved["n"]
     sample_str = resolved["sample_str"]
@@ -232,14 +187,20 @@ if __name__ == "__main__":
     del resolved
 
     md_config = MDSettings(fs=fs, temp=temp, dt=dt, interval=interval, md_method=md_method)
-    model_names, formatted_model_names = build_ft_model_names(base_model_names,
-                                                              system_ft_name,
-                                                              n,
-                                                              sample_str,
-                                                              energy_str,
-                                                              rep_num,
-                                                              omol_energy_str,
-                                                              omol_rep_num)
+
+    # formatted labels for trajectory names: fine-tuned entries -> compact label, else model name
+    ft_suffixes = [f"_{system_ft_name}_{n}_config_strat_{sample_str}fine_tuned_{en}rep_{rep}"
+                   for en, rep in ((energy_str, rep_num), (omol_energy_str, omol_rep_num))]
+    formatted_model_names = []
+    for model_name in model_names:
+        for ft_en, ft_suffix in zip((energy_str, omol_energy_str), ft_suffixes):
+            if model_name.endswith(ft_suffix):
+                base = model_name[:-len(ft_suffix)]
+                stem = "MACE-OFF23" if base == "MACE-OFF23_medium" else base
+                model_name = f"{stem}_{system_ft_name}_{n}_config_{ft_en}{sample_str}ft"
+                break
+        formatted_model_names.append(model_name)
+
     logger.info(f'Evaluating models: {model_names}')
 
     # === 5. INIT CONFIG SET (OPTIMISED TS PER MODEL) ===

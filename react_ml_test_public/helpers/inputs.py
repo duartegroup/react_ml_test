@@ -536,11 +536,12 @@ def resolve_mlip_ts_opt_yaml(input_yaml_fpath: str, parser=None):
 def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
     """Load + process the input YAML for run_mlip_md.py.
 
-    The YAML specifies the test system / starting configs, MD settings, the set of
-    fine-tuned models (given as base model names + fine-tuning naming components; the
-    script builds the full ``model_names`` and ``formatted_model_names`` from these) and
-    the remaining run options. Returns a flat dict of the config variables that the
-    script's ``__main__`` declares.
+    The YAML specifies the test system / starting configs, MD settings, the model list
+    (full model names, supporting ``${var}`` templating from the fine-tuning naming
+    components so zero-shot and fine-tuned models can be mixed) and the remaining run
+    options. The script builds the ``formatted_model_names`` (trajectory-name labels)
+    from these. Returns a flat dict of the config variables that the script's
+    ``__main__`` declares.
     """
     input_config = _load_yaml_config(input_yaml_fpath, parser)
 
@@ -581,13 +582,16 @@ def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
     md_runs_per_config = int(input_config.get("md_runs_per_config", 1))
     box_dim = _parse_box_dim(input_config.get("box_dim", None))
 
-    # ===== models (fine-tuned naming components) =====
-    base_model_names = _need("base_model_names")
-    if not isinstance(base_model_names, list) or not base_model_names:
-        _error(parser, "'base_model_names' must be a non-empty list of base model names "
-                       "in the input YAML.")
-    system_ft_name = str(_need("system_ft_name"))
-    n = int(_need("n"))
+    # ===== models (explicit model_names list + fine-tuning naming components) =====
+    model_names = _need("model_names")
+    if not isinstance(model_names, list) or not model_names:
+        _error(parser, "'model_names' must be a non-empty list of model names in the input YAML.")
+    if any("${" in str(model_name) for model_name in model_names):
+        _error(parser, "Unresolved '${var}' reference(s) in 'model_names'; define the "
+                       "referenced variable(s) in the input YAML.")
+    system_ft_name = str(input_config.get("system_ft_name", "") or "")
+    n = input_config.get("n", None)
+    n = int(n) if n is not None else None
     sample_str = str(input_config.get("sample_str", "") or "")
     energy_str = str(input_config.get("energy_str", "energy_") or "")
     rep_num = int(input_config.get("rep_num", 1))
@@ -611,7 +615,7 @@ def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
         "num_init_configs": num_init_configs,
         "md_runs_per_config": md_runs_per_config,
         "box_dim": box_dim,
-        "base_model_names": base_model_names,
+        "model_names": model_names,
         "system_ft_name": system_ft_name,
         "n": n,
         "sample_str": sample_str,

@@ -430,7 +430,38 @@ def check_orca_outputs(work_dir: str, input_name: str):
     print("=========================")
 
 
-def load_model_calculator(model_name: str, 
+def check_cuda_setup(cuda_device: str = "cuda:0") -> bool:
+    """Quick sanity check / logging of the configured PyTorch CUDA device.
+
+    Logs whether CUDA is available and the current device name, then moves a small test
+    tensor onto ``cuda_device`` (or CPU when CUDA is unavailable) and logs where it ends
+    up. Returns True if CUDA is available.
+
+    ``torch`` is imported lazily so that importing this module does not pull in the
+    PyTorch stack.
+    """
+    import torch
+
+    cuda_available = torch.cuda.is_available()
+    logger.info(f"CUDA is available: {cuda_available}")
+
+    # Check the default device
+    if cuda_available:
+        logger.info(f"Current device: {torch.cuda.current_device()}")
+        logger.info(f"Device name: {torch.cuda.get_device_name(torch.cuda.current_device())}")
+    else:
+        logger.info("CUDA is not available.")
+
+    # Create a tensor and move it to the GPU if available
+    device = torch.device(cuda_device if cuda_available else "cpu")
+    tensor = torch.tensor([1.0, 2.0, 3.0]).to(device)
+
+    # Check if the tensor is on GPU
+    logger.info(f"Tensor device: {tensor.device}")
+    return cuda_available
+
+
+def load_model_calculator(model_name: str,
                           device='cuda:0', 
                           model_loader: Literal['MACE', 'ani', 'graph-pes'] = None,
                           enable_cueq: bool = False,

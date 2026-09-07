@@ -10,8 +10,7 @@ Tools and scripts for training / evaluating machine-learned interatomic potentia
    pip install hdf5plugin
    ```
 2. Install this package into the environment. **This install is required** — it provides the
-   `rmlt` command used to run the workflow scripts (see [Running the scripts](#running-the-scripts)),
-   rather than loose files in a checkout. An editable install is recommended while developing:
+   `rmlt` command used to run the workflow scripts (see [Running the scripts](#running-the-scripts)). An editable install is recommended while developing:
    ```bash
    pip install -e .
    ```
