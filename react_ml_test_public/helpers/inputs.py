@@ -7,6 +7,7 @@ function in this module that takes in and processes the YAML for that script:
     resolve_test_set_comparison_yaml(...)          -> run_test_set_comparison.py
     resolve_pretrain_bias_analysis_yaml(...)       -> run_pretrain_bias_analysis.py
     resolve_reaction_barrier_comparison_yaml(...)  -> run_reaction_barrier_comparison.py
+    resolve_mlip_ts_opt_yaml(...)                  -> run_mlip_ts_opt.py
 
 Each function performs the shared file checks / parsing / ``${var}`` substitution
 (via ``_load_yaml_config``) followed by that script's own field resolution and
@@ -33,6 +34,7 @@ from react_ml_test_public.helpers.settings import (
     KJ_PER_MOL,
     MEV,
     MEV_PER_ATOM,
+    OPT_DIR,
     PAPER_MODEL_COLOURS,
 )
 
@@ -435,4 +437,96 @@ def resolve_pretrain_bias_analysis_yaml(input_yaml_fpath: str, parser=None):
         "scatter_mag_ylim": scatter_mag_ylim,
         "mag_log_y": mag_log_y,
         "mag_remove_negs": mag_remove_negs,
+    }
+
+
+def resolve_mlip_ts_opt_yaml(input_yaml_fpath: str, parser=None):
+    """Load + process the input YAML for run_mlip_ts_opt.py.
+
+    Returns a flat dict of the config variables that script's ``__main__`` declares.
+    """
+    input_config = _load_yaml_config(input_yaml_fpath, parser)
+
+    def _need(key):
+        value = input_config.get(key, None)
+        if value is None:
+            _error(parser, f"Missing required field '{key}' in input YAML.")
+        return value
+
+    # ===== TS guess (input config) =====
+    save_name = str(_need("save_name"))
+    react_coords = [tuple(pair) for pair in _need("react_coords")]
+    num_solute_atoms = int(_need("num_solute_atoms"))
+    input_config_fp = str(_need("input_config_fp"))
+    ref_config_fp = input_config.get("ref_config_fp", None)
+    reverse_displace = _as_bool(input_config.get("reverse_displace", False), default=False)
+
+    # ===== model / fine-tuning selection =====
+    model_names = _need("model_names")
+    if not isinstance(model_names, list) or not model_names:
+        _error(parser, "'model_names' must be a non-empty list of model names in the input YAML.")
+    if any("${" in str(model_name) for model_name in model_names):
+        _error(parser, "Unresolved '${var}' reference(s) in 'model_names'; define the "
+                       "referenced variable(s) in the input YAML.")
+    system_ft_name = str(input_config.get("system_ft_name", None) or "")
+    n = input_config.get("n", None)
+    n = int(n) if n is not None else None
+    sample_str = str(input_config.get("sample_str", "") or "")
+    energy_str = str(input_config.get("energy_str", "energy_") or "")
+    rep_num = int(input_config.get("rep_num", 1))
+    omol_rep_num = int(input_config.get("omol_rep_num", 1))
+    omol_energy_str = str(input_config.get("omol_energy_str", "energy_") or "")
+
+    # ===== solvent (optional, off by default) =====
+    include_solvent = _as_bool(input_config.get("include_solvent", False), default=False)
+    if include_solvent:
+        solvent_xyz_fpath = str(_need("solvent_xyz_fpath"))
+        solvent_name = str(_need("solvent_name"))
+        solvent_density = float(_need("solvent_density"))
+        atoms_per_solv_mol = int(_need("atoms_per_solv_mol"))
+        solvation_box_size = float(_need("solvation_box_size"))
+    else:
+        solvent_xyz_fpath = None
+        solvent_name = None
+        solvent_density = None
+        atoms_per_solv_mol = None
+        solvation_box_size = None
+    solv_shell_cutoff = float(input_config.get("solv_shell_cutoff", 0.0))
+
+    # ===== optimiser / run settings =====
+    out_dir = input_config.get("out_dir", None) or OPT_DIR
+    fmax = float(input_config.get("fmax", 0.001))
+    displace_mag = float(input_config.get("displace_mag", 0.05))
+    enable_cueq = _as_bool(input_config.get("enable_cueq", False), default=False)
+    override_cache = _as_bool(input_config.get("override_cache", False), default=False)
+    cuda_device = str(input_config.get("cuda_device", "cuda:0"))
+
+    return {
+        "save_name": save_name,
+        "react_coords": react_coords,
+        "num_solute_atoms": num_solute_atoms,
+        "input_config_fp": input_config_fp,
+        "ref_config_fp": ref_config_fp,
+        "reverse_displace": reverse_displace,
+        "model_names": model_names,
+        "system_ft_name": system_ft_name,
+        "n": n,
+        "sample_str": sample_str,
+        "energy_str": energy_str,
+        "rep_num": rep_num,
+        "omol_rep_num": omol_rep_num,
+        "omol_energy_str": omol_energy_str,
+        "include_solvent": include_solvent,
+        "solvent_xyz_fpath": solvent_xyz_fpath,
+        "solvent_name": solvent_name,
+        "solvent_density": solvent_density,
+        "atoms_per_solv_mol": atoms_per_solv_mol,
+        "solvation_box_size": solvation_box_size,
+        "solv_shell_cutoff": solv_shell_cutoff,
+        "out_dir": out_dir,
+        "fmax": fmax,
+        "displace_mag": displace_mag,
+        "enable_cueq": enable_cueq,
+        "override_cache": override_cache,
+        "cuda_device": cuda_device,
     }

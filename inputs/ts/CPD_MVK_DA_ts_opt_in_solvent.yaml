@@ -1,0 +1,49 @@
+# CPD_MVK_DA endo Diels-Alder TS opt in water. Dimer-method TS opt with MLIP in vacuum, 
+# followed by solvation of the optimised TS in PBC, MD equilibration with a frozen solute, and a frozen-solvent 
+# Dimer-method TS re-optimisation (include_solvent: true).
+#
+# Run with:
+#   rmlt run-mlip-ts-opt inputs/ts/CPD_MVK_DA_ts_opt_in_solvent.yaml
+#
+# Paths are relative to the repository root.
+
+# === 1. SELECT INPUT CONFIG (TS GUESS) ===
+save_name: CPD_MVK_DA
+react_coords: [[1, 12], [6, 11]]
+num_solute_atoms: 22
+input_config_fp: data/reaction_data/CPD_MVK_DA/TS/CPD_MVK_DA_TS_MMFF.xyz
+ref_config_fp: data/reaction_data/CPD_MVK_DA/TS/CPD_MVK_DA_vac_TS_wB97M.xyz
+reverse_displace: false
+
+# === 2. SELECT MODEL ===
+# fine-tuned model-naming components (used by the ${...} templating in model_names)
+system_ft_name: CPD_MVK_DA_train
+n: 42
+sample_str: "ts_gauss_"
+energy_str: "energy_"
+rep_num: 1
+omol_rep_num: 1
+omol_energy_str: "energy_"
+
+model_names:
+  - GO-MACE-23_${system_ft_name}_${n}_config_strat_${sample_str}fine_tuned_${energy_str}rep_${rep_num}
+  - MACE-OFF23_medium_${system_ft_name}_${n}_config_strat_${sample_str}fine_tuned_${energy_str}rep_${rep_num}
+  - MACE-MP-0b3_medium_${system_ft_name}_${n}_config_strat_${sample_str}fine_tuned_${energy_str}rep_${rep_num}
+  - MACE-omol-0-extra-large-1024_${system_ft_name}_${n}_config_strat_${sample_str}fine_tuned_${omol_energy_str}rep_${omol_rep_num}
+
+# === 3. SOLVENT ===
+include_solvent: true
+solvent_xyz_fpath: data/solvents/h2o.xyz
+solvent_name: water
+solvent_density: 0.997
+atoms_per_solv_mol: 3
+solvation_box_size: 18.5
+solv_shell_cutoff: 0.0
+
+# === 4. OPTIMISER / RUN SETTINGS ===
+out_dir: out/opt
+fmax: 0.001
+displace_mag: 0.05
+enable_cueq: false
+override_cache: false
+cuda_device: "cuda:0"

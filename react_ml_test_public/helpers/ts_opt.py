@@ -96,7 +96,7 @@ def mlip_dimer_method(input_config_fp: str,
 
     # Set up the dimer
     react_coord_ids = set([a_id for r_coord in react_coords for a_id in r_coord])
-    print(f'React Coord IDs: {react_coord_ids}')
+    logger.info(f'React Coord IDs: {react_coord_ids}')
     with DimerControl(initial_eigenmode_method='displacement',
                       displacement_method='vector',
                       maximum_translation=0.1,
