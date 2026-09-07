@@ -1,3 +1,11 @@
+# run_test_set_comparison.py input YAML - CPD_MVK_DA fine-tuned (FT42) test-set comparison.
+# Compares zero-shot and fine-tuned MLIP energies / forces against DFT on the CPD_MVK_DA test set.
+
+# Run with:
+#   rmlt run-test-set-comparison inputs/test/CPD_MVK_DA_FT42_test.yaml
+
+# Paths are relative to the repository root.
+
 n: 42
 train_name: CPD_MVK_DA_train
 test_name: CPD_MVK_DA_test

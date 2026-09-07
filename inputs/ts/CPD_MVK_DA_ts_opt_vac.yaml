@@ -1,9 +1,9 @@
-# CPD + MVK endo Diels-Alder TS opt in vacuum using Dimer-method with MLIPs, 
-# followed by MLIP vibrational-frequency confirmation of the optimised TS.
+# run_mlip_ts_opt.py input YAML - CPD_MVK_DA endo Diels-Alder TS optimisation in vacuum.
+# Dimer-method MLIP TS search, followed by MLIP vibrational-frequency confirmation of the optimised TS.
 
 # Run with:
 #   rmlt run-mlip-ts-opt inputs/ts/CPD_MVK_DA_ts_opt_vac.yaml
-#
+
 # Paths are relative to the repository root.
 
 # === 1. SELECT INPUT CONFIG (TS GUESS) ===

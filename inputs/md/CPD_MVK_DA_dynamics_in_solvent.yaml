@@ -1,10 +1,9 @@
 # run_mlip_md.py input YAML - CPD_MVK_DA MLIP MD dynamics in water.
-# Runs MD trajectories starting from each model's in-water-optimised TS
-# (out/opt/CPD_MVK_DA_in_water_<model>_opt_TS.xyz).
-#
+# Runs MLIP MD trajectories starting from each model's in-water-optimised TS (out/opt/CPD_MVK_DA_in_water_<model>_opt_TS.xyz).
+
 # Run with:
 #   rmlt run-mlip-md inputs/md/CPD_MVK_DA_dynamics_in_solvent.yaml
-#
+
 # Paths are relative to the repository root.
 
 # === 1. SYSTEM / STARTING CONFIGS ===

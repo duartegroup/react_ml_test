@@ -1,10 +1,9 @@
 # run_mlip_md.py input YAML - anthracene_DA MLIP MD dynamics in toluene.
-# Runs MD trajectories starting from each model's in-toluene-optimised TS
-# (out/opt/anthracene_DA_in_toluene_<model>_opt_TS.xyz).
-#
+# Runs MLIP MD trajectories starting from each model's in-toluene-optimised TS (out/opt/anthracene_DA_in_toluene_<model>_opt_TS.xyz).
+
 # Run with:
 #   rmlt run-mlip-md inputs/md/anthracene_DA_dynamics_in_solvent.yaml
-#
+
 # Paths are relative to the repository root.
 
 # === 1. SYSTEM / STARTING CONFIGS ===

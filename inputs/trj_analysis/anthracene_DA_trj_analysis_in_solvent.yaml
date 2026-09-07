@@ -1,9 +1,10 @@
 # run_trajectory_analysis.py input YAML - anthracene_DA trajectory analysis (MD in toluene).
-# Analyses the MD trajectories produced by run_mlip_md.py from
-# inputs/md/anthracene_DA_dynamics_in_solvent.yaml, i.e. out/trj/anthracene_DA_toluene_opt_TS_<model>_300K_1.0ps*.
-#
+# Analyses the run_mlip_md.py trajectories from inputs/md/anthracene_DA_dynamics_in_solvent.yaml in the r1-r2 plane (out/trj/anthracene_DA_toluene_opt_TS_<model>_300K_1.0ps*_traj.xyz).
+
 # Run with:
 #   rmlt run-trajectory-analysis inputs/trj_analysis/anthracene_DA_trj_analysis_in_solvent.yaml
+
+# Paths are relative to the repository root.
 
 # === 1. TRAJECTORY SOURCE ===
 traj_type: anthracene_DA_toluene_opt_TS

@@ -1,10 +1,9 @@
-# CPD_MVK_DA endo Diels-Alder TS opt in water. Dimer-method TS opt with MLIP in vacuum, 
-# followed by solvation of the optimised TS in PBC, MD equilibration with a frozen solute, and a frozen-solvent 
-# Dimer-method TS re-optimisation (include_solvent: true).
-#
+# run_mlip_ts_opt.py input YAML - CPD_MVK_DA endo Diels-Alder TS optimisation in water.
+# Dimer-method MLIP TS search in vacuum, followed by solvation, MD equilibration with a frozen solute, and a frozen-solvent TS re-optimisation.
+
 # Run with:
 #   rmlt run-mlip-ts-opt inputs/ts/CPD_MVK_DA_ts_opt_in_solvent.yaml
-#
+
 # Paths are relative to the repository root.
 
 # === 1. SELECT INPUT CONFIG (TS GUESS) ===

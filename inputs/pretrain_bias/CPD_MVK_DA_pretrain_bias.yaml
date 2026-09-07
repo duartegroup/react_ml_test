@@ -1,3 +1,11 @@
+# run_pretrain_bias_analysis.py input YAML - CPD_MVK_DA pretraining-bias analysis.
+# Analyses the MLIP pretraining bias (MACE-descriptor similarity / error correlations) over RS / TS / PS subsets of the CPD_MVK_DA test set.
+
+# Run with:
+#   rmlt run-pretrain-bias-analysis inputs/pretrain_bias/CPD_MVK_DA_pretrain_bias.yaml
+
+# Paths are relative to the repository root.
+
 # ---- test system ----
 test_name: CPD_MVK_DA_test
 test_fpath: data/reaction_data/CPD_MVK_DA/test/CPD_MVK_DA_test.xyz

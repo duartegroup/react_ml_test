@@ -1,9 +1,10 @@
 # run_trajectory_analysis.py input YAML - guajadial_DA trajectory analysis (vacuum MD).
-# Analyses the MD trajectories produced by run_mlip_md.py from
-# inputs/md/guajadial_DA_dynamics_vac.yaml, i.e. out/trj/guajadial_DA_vac_opt_TS_<model>_300K_1.0ps*.
-#
+# Analyses the run_mlip_md.py trajectories from inputs/md/guajadial_DA_dynamics_vac.yaml in the r1-r2 plane (out/trj/guajadial_DA_vac_opt_TS_<model>_300K_1.0ps*_traj.xyz).
+
 # Run with:
 #   rmlt run-trajectory-analysis inputs/trj_analysis/guajadial_DA_trj_analysis_vac.yaml
+
+# Paths are relative to the repository root.
 
 # === 1. TRAJECTORY SOURCE ===
 traj_type: guajadial_DA_vac_opt_TS

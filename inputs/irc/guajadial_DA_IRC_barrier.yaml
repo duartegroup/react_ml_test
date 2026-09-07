@@ -1,3 +1,11 @@
+# run_reaction_barrier_comparison.py input YAML - guajadial_DA IRC reaction-barrier comparison.
+# Compares MLIP reaction profiles and barrier heights against DFT along the guajadial_DA IRC trajectory.
+
+# Run with:
+#   rmlt run-reaction-barrier-comparison inputs/irc/guajadial_DA_IRC_barrier.yaml
+
+# Paths are relative to the repository root.
+
 # ---- model / fine-tuning selection ----
 n: 50
 train_name: guajadial_DA_train
