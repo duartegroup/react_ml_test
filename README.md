@@ -2,13 +2,17 @@
 
 Tools and scripts for training / evaluating machine-learned interatomic potentials (MLIPs) for chemical reactions in vacuum and solution, as part of the pre-print: "Data-efficient fine-tuning for reaction modelling in explicit solvent" (Holownia, J.; Juraskova, V.; Deringer, V. L., Duarte, F., 2026): https://chemrxiv.org/doi/abs/10.26434/chemrxiv.15007217/v1.
 
+An ORA repository of trained models, data, and other supplementary results can be accessed here: [<>](https://ora.ox.ac.uk/objects/uuid:97dc4d30-24c1-473b-9379-86935fc54350).
+
 ## Setup
 
 1. Create a conda environment with the required MLIP stack. For example, clone `mlptrain` separately and run its `./install_mace.sh` script - this provides the conda environment named `mlptrain-mace`:
+   
    ```bash
    conda activate mlptrain-mace
    pip install hdf5plugin
    ```
+
 2. Install this package into the environment. **This install is required** — it provides the
    `rmlt` command used to run the workflow scripts (see [Running the scripts](#running-the-scripts)). An editable install is recommended while developing:
    ```bash
@@ -45,7 +49,7 @@ python -m react_ml_test_public.scripts.run_test_set_comparison
 
 ## Examples
 
-Note: these examples will load packaged precalculated .npz or .csv file results to produce figures, as running the calculations requires a GPU and the respective models. If you wish to run these examples and fully re-calculate results, remove the relevant .npz cache files and add the required models in react_ml_test_public/models, which can be found in our ORA repository: <>. 
+Note: these examples will load packaged precalculated .npz or .csv file results to produce figures, as running the calculations requires a GPU and the respective models. If you wish to run the examples below: npz files of saved results in the ORA repository linked at the top of this file should be moved into `react_ml_test_public/out/npz` (these are small). If you wish to re-calculate examples from scratch, models from the ORA repository should be copied to `react_ml_test_public/models`, and all .npz files cleared by running `rmlt clear_npz_cache.py`.
 
 ### 1. Test set energy + force errors:
 
@@ -65,7 +69,7 @@ For zero-shot and fine-tuned models for CPD + MVK DA system:
 
 Run: ```rmlt run-reaction-barrier-comparison inputs/CPD_MVK_DA_FT42_IRC.yaml```.
 
-Output figures will be saved in `out/plt/bar_plot/`, and `out/csv/`, along with relevant values / statistics printed to the terminal.
+Output figures will be saved in `out/plt/trj_comp/`, `out/plt/index/`, and `out/csv/`, along with relevant values / statistics printed to the terminal.
 
 This script reproduces Figure 3c\) in the paper, along with relevant supplementary plots.
 
@@ -73,19 +77,35 @@ To run this for the other systems, use `inputs/test/anthracene_DA_FT46_IRC.yaml`
 
 ### 3. TS Optimisation + dynamics:
 
-1. TS Optimisation
+E.g. for fine-tuned model TS optimisation in vacuum and dynamics for CPD + MVK DA system:
 
-For fine-tuned models for CPD + MVK DA system:
+#### 1. TS Optimisation
 
-Run: ```rmlt run-reaction-barrier-comparison inputs/CPD_MVK_DA_FT42_IRC.yaml```.
+First run: `rmlt run-mlip-ts-opt inputs/ts/CPD_MVK_DA_ts_opt_vac.yaml`.
 
-2. Downhill dynamics
+Output optimised TSs, optimisation trajectories, logs and vibrational modes will be stored in `out/opt/`.
 
+#### 2. Downhill dynamics
 
+Then, run: `rmlt run-mlip-md inputs/md/CPD_MVK_DA_dynamics_vac.yaml`.
+
+This will take the output optimised TS in vacuum from 1. and run 10 1ps dynamics runs, with the trajectories output to `out/trj/`.
+
+#### 3. Analysis
+
+To analyse the output trajectories, we then run:
+
+`rmlt run-trajectory-analysis inputs/trj_analysis/CPD_MVK_DA_trj_analysis_vac.yaml`
+
+Which will produce 2D trajectory plots like that in Figure 3d\) in `out/plt/trj_atom_dist/`, and print relevant RS / PS formation ratios.
+
+The same process can be run but for solvent, using the relevant `in_solvent` yaml scripts (note that this can take some time).
+YAML inputs for the other two systems are also found in `inputs/`.
 
 ### 4. Pretraining bias analysis:
 
 For CPD + MVK DA system:
+
 
 
 ## Key Workflows
@@ -96,7 +116,7 @@ For CPD + MVK DA system:
 
 #### 2. `scripts/ref_energy_ref_force_label.sh <dir>`
 
-    - DESCRIPTION: Bash script to relabel energy and force labels to REF_energy and REF_force, compatible with MACE.
+    - DESCRIPTION: Bash script to relabel energy and force labels to REF_energy and REF_force, compatible with mace-torch.
     - USAGE:
 
 #### 3. `rmlt add-xyz-metadata`
