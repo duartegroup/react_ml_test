@@ -104,9 +104,11 @@ YAML inputs for the other two systems are also found in `inputs/`.
 
 ### 4. Pretraining bias analysis:
 
-For CPD + MVK DA system:
+For the CPD + MVK DA system:
 
+Run: `rmlt run-pretrain-bias-analysis inputs/pretrain_bias/CPD_MVK_DA_pretrain_bias.yaml`.
 
+This will produce plots in `out/plt/descriptors` of the overall correlation scores, linear coefficients, and predicted error magnitudes across all models for each breakdown of the data.
 
 ## Key Workflows
 
