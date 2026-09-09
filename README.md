@@ -6,15 +6,18 @@ An ORA repository of trained models, data, and other supplementary results can b
 
 ## Setup
 
-1. Create a conda environment with the required MLIP stack. For example, clone `mlptrain` separately and run its `./install_mace.sh` script - this provides the conda environment named `mlptrain-mace`:
+1. Clone / fork this repository.
+   
+2. This repository has dependencies with [mlptrain](https://github.com/duartegroup/mlp-train). Clone `mlptrain` and run the `./install_mace.sh` script - this provides the conda environment named `mlptrain-mace`. Then:
    
    ```bash
    conda activate mlptrain-mace
    pip install hdf5plugin
    ```
 
-2. Install this package into the environment. **This install is required** — it provides the
+3. Install this package into the environment. **This install is required** — it provides the
    `rmlt` command used to run the workflow scripts (see [Running the scripts](#running-the-scripts)). An editable install is recommended while developing:
+   
    ```bash
    pip install -e .
    ```
@@ -29,7 +32,7 @@ Notes:
 ## Running scripts
 
 Installing the package (see [Setup](#setup)) adds the `rmlt` command to your `PATH`.
-Workflow scripts live in the `react_ml_test_public.scripts` package, and `rmlt` runs one of them by name from the repository root (the scripts read `data/`, `models/`, `inputs/` and write to `out/` relative to the current working directory), for e.g.:
+Scripts live in the `react_ml_test_public.scripts` package, and `rmlt` runs them by name from the repository root, for e.g.:
 
 ```bash
 rmlt run-test-set-comparison <args>
@@ -49,7 +52,7 @@ python -m react_ml_test_public.scripts.run_test_set_comparison
 
 ## Examples
 
-Note: these examples will load packaged precalculated .npz or .csv file results to produce figures, as running the calculations requires a GPU and the respective models. If you wish to run the examples below: npz files of saved results in the ORA repository (`results/npz`) linked at the top of this file should be moved into `react_ml_test_public/out/npz` (these are small). If you wish to re-calculate examples from scratch, models from the ORA repository (`models/`) should be copied to `react_ml_test_public/models/`, and all .npz files cleared by running `rmlt clear-npz-cache`. Models are required for TS optimisation + dynamics examples.
+Note: these examples will load packaged precalculated .npz results to produce figures, as running the calculations requires a GPU and the respective models. If you wish to run the examples below: npz files of saved results in the ORA repository (`results/npz`) linked at the top of this file should be copied to `react_ml_test_public/out/npz` (these are small). If you wish to re-calculate examples from scratch, models from the ORA repository (`models/`) should be copied to `react_ml_test_public/models/`, and all .npz files cleared by running `rmlt clear-npz-cache`. Models are required for TS optimisation + dynamics examples.
 
 ### 1. Test set energy + force errors:
 
