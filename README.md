@@ -49,7 +49,7 @@ python -m react_ml_test_public.scripts.run_test_set_comparison
 
 ## Examples
 
-Note: these examples will load packaged precalculated .npz or .csv file results to produce figures, as running the calculations requires a GPU and the respective models. If you wish to run the examples below: npz files of saved results in the ORA repository linked at the top of this file should be moved into `out/npz` (these are small). If you wish to re-calculate examples from scratch, models from the ORA repository should be copied to `models`, and all .npz files cleared by running `rmlt clear-npz-cache`.
+Note: these examples will load packaged precalculated .npz or .csv file results to produce figures, as running the calculations requires a GPU and the respective models. If you wish to run the examples below: npz files of saved results in the ORA repository (`results/npz`) linked at the top of this file should be moved into `react_ml_test_public/out/npz` (these are small). If you wish to re-calculate examples from scratch, models from the ORA repository (`models/`) should be copied to `react_ml_test_public/models/`, and all .npz files cleared by running `rmlt clear-npz-cache`. Models are required for TS optimisation + dynamics examples.
 
 ### 1. Test set energy + force errors:
 
