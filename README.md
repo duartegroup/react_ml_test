@@ -49,7 +49,7 @@ python -m react_ml_test_public.scripts.run_test_set_comparison
 
 ## Examples
 
-Note: these examples will load packaged precalculated .npz or .csv file results to produce figures, as running the calculations requires a GPU and the respective models. If you wish to run the examples below: npz files of saved results in the ORA repository linked at the top of this file should be moved into `react_ml_test_public/out/npz` (these are small). If you wish to re-calculate examples from scratch, models from the ORA repository should be copied to `react_ml_test_public/models`, and all .npz files cleared by running `rmlt clear_npz_cache.py`.
+Note: these examples will load packaged precalculated .npz or .csv file results to produce figures, as running the calculations requires a GPU and the respective models. If you wish to run the examples below: npz files of saved results in the ORA repository linked at the top of this file should be moved into `out/npz` (these are small). If you wish to re-calculate examples from scratch, models from the ORA repository should be copied to `models`, and all .npz files cleared by running `rmlt clear-npz-cache`.
 
 ### 1. Test set energy + force errors:
 
@@ -57,7 +57,7 @@ For zero-shot and fine-tuned models for CPD + MVK DA system:
 
 Run: ```rmlt run-test-set-comparison inputs/test/CPD_MVK_DA_FT42_test.yaml```.
 
-Output figures will be saved in `out/plt/bar_plot/`, and `out/csv/`, along with relevant values / statistics printed to the terminal.
+Output figures will be saved in `out/plt/bar_plots/`, and `out/csv/`, along with relevant values / statistics printed to the terminal.
 
 This script reproduces the violin plot in Figure 3b\) in the paper, along with relevant supplementary bar plots.
 
@@ -67,13 +67,13 @@ To run this for the other two systems, use `inputs/test/anthracene_DA_FT46_test.
 
 For zero-shot and fine-tuned models for CPD + MVK DA system:
 
-Run: ```rmlt run-reaction-barrier-comparison inputs/CPD_MVK_DA_FT42_IRC.yaml```.
+Run: ```rmlt run-reaction-barrier-comparison inputs/irc/CPD_MVK_DA_IRC_barrier.yaml```.
 
 Output figures will be saved in `out/plt/trj_comp/`, `out/plt/index/`, and `out/csv/`, along with relevant values / statistics printed to the terminal.
 
 This script reproduces Figure 3c\) in the paper, along with relevant supplementary plots.
 
-To run this for the other systems, use `inputs/test/anthracene_DA_FT46_IRC.yaml`, `inputs/test/anthracene_1_4_DA_FT46_IRC.yaml`, and `inputs/test/guajadial_DA_FT50_IRC.yaml`.
+To run this for the other systems, use `inputs/irc/anthracene_DA_IRC_barrier.yaml`, `inputs/irc/anthracene_1_4_DA_IRC_barrier.yaml`, and `inputs/irc/guajadial_DA_IRC_barrier.yaml`.
 
 ### 3. TS Optimisation + dynamics:
 
@@ -116,28 +116,23 @@ This will produce plots in `out/plt/descriptors` of the overall correlation scor
 
 #### 1. `rmlt save-npz-as-xyz`
 
-#### 2. `scripts/ref_energy_ref_force_label.sh <dir>`
-
-    - DESCRIPTION: Bash script to relabel energy and force labels to REF_energy and REF_force, compatible with mace-torch.
-    - USAGE:
-
-#### 3. `rmlt add-xyz-metadata`
+#### 2. `rmlt add-xyz-metadata`
 
     - DESCRIPTION: Adds some xyz metadata to an .xyz file (= i.e. config type labels / box dimensions).
     - USAGE: Add relevant parameters in the python script and then run.
 
-#### 4. `rmlt filter-datasets`
+#### 3. `rmlt filter-datasets`
 
     - DESCRIPTION: Script to filter and / or combine .xyz file datasets.
     - USAGE: Add relevant parameters in the python script and then run, use this as in the other examples to first do force filtering, then filter by config type to create subsets.
 
-#### 5. `rmlt save-train-test-split`
+#### 4. `rmlt save-train-test-split`
 
     - DESCRIPTION: Script to perform a train / valid / test split of an input dataset (or group of datasets) and save these as separate files.
     - USAGE: Combine all dataset subset sources (i.e. AL vac / solv + additional vacuum / solv configs) and split them into for e.g. a 70:10:20 train/valid/test split.
-             Then use script in 4. to create train / valid / test vacuum / solvated subsets.
+             Then use script in 3. to create train / valid / test vacuum / solvated subsets.
 
-#### 6. `rmlt run-ds-analysis`
+#### 5. `rmlt run-ds-analysis`
 
     - DESCRIPTION: analyse the spread of your dataset about a reaction coordinate, with SOAP descriptors, energy / force distributions etc.
 
