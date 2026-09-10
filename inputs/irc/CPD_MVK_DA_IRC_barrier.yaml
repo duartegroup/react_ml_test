@@ -16,9 +16,13 @@ omol_rep_num: 1                # OMOL model repetition number
 omol_energy_str: "energy_"     # OMOL energy suffix/prefix string
 
 model_names:
+  - GO-MACE-23
   - GO-MACE-23_${train_name}_${n}_config_strat_${sample_str}fine_tuned_${energy_str}rep_${rep_num}
+  - MACE-OFF23_medium
   - MACE-OFF23_medium_${train_name}_${n}_config_strat_${sample_str}fine_tuned_${energy_str}rep_${rep_num}
+  - MACE-MP-0b3_medium
   - MACE-MP-0b3_medium_${train_name}_${n}_config_strat_${sample_str}fine_tuned_${energy_str}rep_${rep_num}
+  - MACE-omol-0-extra-large-1024
   - MACE-omol-0-extra-large-1024_${train_name}_${n}_config_strat_${sample_str}fine_tuned_${omol_energy_str}rep_${omol_rep_num}
 
 save_name: paper_ft_models_n=42
@@ -28,9 +32,9 @@ save_name: paper_ft_models_n=42
 #   - ${save_name}
 
 num_base_models: 4
-num_base_model_comps: 1
-alpha_list: [0.9]
-linestyle_list: ["-"]
+num_base_model_comps: 2
+alpha_list: [0.3, 0.9]
+linestyle_list: ["-.", "-"]
 
 # ---- IRC trajectory comparison ----
 test_trj_fpath: data/reaction_data/CPD_MVK_DA/test/CPD_MVK_wB97M_IRC.xyz
