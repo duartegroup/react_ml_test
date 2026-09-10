@@ -56,7 +56,8 @@ Note: these examples will load precalculated .npz results to produce figures, as
 
 ### 1. Test set energy + force errors:
 
-![alt text](https://github.com/duartegroup/react_ml_test/blob/main/img/eg_1.png "Eg 1")
+<!-- ![alt text](https://github.com/duartegroup/react_ml_test/blob/main/img/eg_1.png "Eg 1") -->
+<img src="img/eg_1.png" width="50%">
 
 For zero-shot and fine-tuned models for CPD + MVK DA system:
 
