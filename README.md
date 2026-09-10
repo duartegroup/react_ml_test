@@ -56,7 +56,6 @@ Note: these examples will load precalculated .npz results to produce figures, as
 
 ### 1. Test set energy + force errors:
 
-<!-- ![alt text](https://github.com/duartegroup/react_ml_test/blob/main/img/eg_1.png "Eg 1") -->
 <img src="img/eg_1.png" width="50%">
 
 For zero-shot and fine-tuned models for CPD + MVK DA system:
@@ -70,6 +69,8 @@ This script reproduces the violin plot in Figure 3b\) in the paper, along with r
 To run this for the other two systems, use `inputs/test/anthracene_DA_FT46_test.yaml` and `inputs/test/guajadial_DA_FT50_test.yaml`.
 
 ### 2. IRC energy barrier:
+
+<img src="img/eg_2a.png" width="45%"> <img src="img/eg_2b.png" width="45%">
 
 For zero-shot and fine-tuned models for CPD + MVK DA system:
 
@@ -110,11 +111,15 @@ YAML inputs for the other two systems are also found in `inputs/`.
 
 ### 4. Pretraining bias analysis:
 
+<img src="img/eg_4a.png" width="45%"> <img src="img/eg_4b.png" width="45%">
+
 For the CPD + MVK DA system:
 
 Run: `rmlt run-pretrain-bias-analysis inputs/pretrain_bias/CPD_MVK_DA_pretrain_bias.yaml`.
 
 This will produce plots in `out/plt/descriptors` of the overall correlation scores, linear coefficients, and predicted error magnitudes across all models for each breakdown of the data.
+
+This can be run for the other two systems using the provided yaml inputs: `inputs/pretrain_bias/anthracene_DA_pretrain_bias.yaml` and ``inputs/pretrain_bias/guajadial_DA_pretrain_bias.yaml`.
 
 ## Key Workflows
 

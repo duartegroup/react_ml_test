@@ -1,6 +1,5 @@
-import os
-
 import colorsys
+import os
 from itertools import combinations
 
 import numpy as np
@@ -10,7 +9,6 @@ from matplotlib.lines import Line2D
 from scipy.stats import linregress, pearsonr
 
 from react_ml_test_public.helpers import inputs as rmlt_inputs
-
 from react_ml_test_public.helpers.io import (
     flexible_ase_read,
     get_ase_atoms_forces,
@@ -22,7 +20,11 @@ from react_ml_test_public.helpers.model_eval import (
     get_model_predictions,
     get_test_and_pred_data,
 )
-from react_ml_test_public.helpers.plot import bar_plot, correlation_scatter_plot, index_plot
+from react_ml_test_public.helpers.plot import (
+    bar_plot,
+    correlation_scatter_plot,
+    index_plot,
+)
 from react_ml_test_public.helpers.sampling import remove_duplicates
 from react_ml_test_public.helpers.settings import (
     ANTHRACENE_DA_DATA_DIR,
@@ -238,84 +240,7 @@ def corr_plot(x_series, y_series, alphas, colours,
     plt.close()
 
     return betas, pred_mags
-    # return betas, pred_mags
 
-
-def pairwise_x_y1_correlations(model_data_dict, x_index: int = 0, y_index: int = 2):
-    """
-    model_data_dict:
-    {
-        model_name: [
-            (subset_name, x1...xi, y1...yi),
-            (subset_name, x1...xi, y1...yi),
-            ...
-        ],
-        ...
-    }
-
-    For each model pair and each subset present in both models:
-        x_d = x_a - x_b
-        y_d = y1_a - y1_b
-
-    Fits:
-        y_d = alpha + beta * x_d
-
-    Prints Pearson r and beta (slope).
-    """
-
-    # Convert each model's list of tuples into a subset lookup
-    model_subset_data = {
-        model_name: {
-            subset_info[0]: subset_info[1:]
-            for subset_info in subset_list
-        }
-        for model_name, subset_list in model_data_dict.items()
-    }
-
-    for model_a, model_b in combinations(model_subset_data.keys(), 2):
-
-        subsets_a = set(model_subset_data[model_a])
-        subsets_b = set(model_subset_data[model_b])
-        common_subsets = sorted(subsets_a & subsets_b)
-
-        for subset_name in common_subsets:
-
-            x_a, yi_a = model_subset_data[model_a][subset_name][x_index], model_subset_data[model_a][subset_name][y_index]
-            x_b, yi_b = model_subset_data[model_b][subset_name][x_index], model_subset_data[model_b][subset_name][y_index]
-
-            x_d = np.asarray(x_a) - np.asarray(x_b)            
-            y_d = np.asarray(yi_a) - np.asarray(yi_b)
-
-            mask = np.isfinite(x_d) & np.isfinite(y_d)
-            x_d = x_d[mask]
-            y_d = y_d[mask]
-
-            if len(x_d) < 2:
-                print(
-                    f"{model_a} vs {model_b} | {subset_name}: "
-                    "insufficient data"
-                )
-                continue
-
-            if not np.all(np.isfinite(x_d)):
-                print(f"Invalid values detected in x for {model_a} vs {model_b}. Skipping.")
-                continue
-
-            if not np.all(np.isfinite(y_d)):
-                print(f"Invalid values detected in y for {model_a} vs {model_b}. Skipping.")
-                continue
-
-            if np.all(x_d == x_d[0]):
-                print(f"x is constant for {model_a} vs {model_b}; cannot fit linear regression. Skipping.")
-                continue
-
-            r, _ = pearsonr(x_d, y_d)
-            beta = linregress(x_d, y_d).slope
-
-            print(
-                f"{model_a} vs {model_b} | {subset_name}: "
-                f"r = {r:.4f}, beta = {beta:.4f}"
-            )
 
 def category_scatter_plot(all_series: list[np.array], 
                           point_markers: list[str],
@@ -577,7 +502,6 @@ if __name__ == "__main__":
         # calc model errors + sort
         all_test_energies, all_test_forces, all_pred_energies_dict, all_pred_forces_dict = get_test_and_pred_data(pred_models,
                                                                                                                    [test_fpath])
-        
         # energies
         test_energies = np.array([all_test_energies[0][i] for i in test_sorted_indices])       
         zero_shot_pred_energies = np.array([all_pred_energies_dict[model_name][0][i] for i in test_sorted_indices])
@@ -605,7 +529,7 @@ if __name__ == "__main__":
         ft_force_norm_errors = np.linalg.norm(test_forces - all_pred_forces_dict[ft_model_name][0], axis=1)
         full_ft_force_norm_errors = np.linalg.norm(test_forces - all_pred_forces_dict[full_ft_model_name][0], axis=1)
 
-        # control for reference trained potential to isolate effect of models / pretraining data!
+        # control for reference trained potentials
         if not all([x is None for x in rel_comp_model_names]):
             scratch_pred_energies = np.array([all_pred_energies_dict[rel_comp_model_name][0][i] for i in test_sorted_indices])
             full_scratch_pred_energies = np.array([all_pred_energies_dict[full_rel_comp_model_name][0][i] for i in test_sorted_indices])
@@ -644,7 +568,6 @@ if __name__ == "__main__":
 
         # forces
         input_lot_forces = convert_units(get_ase_props(input_lot_configs, 'forces'), EV_PER_AMSTRONG, MEV_PER_AMSTRONG)
-        # lot_force_norms = np.linalg.norm(input_lot_forces, axis=1)
         config_lot_forces = unflatten_array_by_lengths(input_lot_forces, input_lot_config_lens)
 
         # load desc similarities
@@ -684,7 +607,6 @@ if __name__ == "__main__":
         # config_scratch_force_norm_errors = [config_scratch_force_norm_errors[i] for i in test_sorted_indices]
         # config_full_scratch_force_norm_errors = [config_full_scratch_force_norm_errors[i] for i in test_sorted_indices]
 
-        # lot_force_norms = np.linalg.norm(input_lot_forces, axis=1)
         # AS LONG AS THE SPLITTING HERE WORKS - we are good
         config_lot_force_norm_errors = [np.linalg.norm(config_test_forces[i] - config_lot_forces[i], axis=1) for i in range(len(config_test_forces))]
 
@@ -962,8 +884,6 @@ if __name__ == "__main__":
         all_lot_mag_series.append(model_lot_mag_series)
         all_sim_mag_series.append(model_sim_mag_series)
 
-    # series_labels = ['Zero Shot Force R', 'FT Force R', 'Full FT Force R']
-
     print_summary_table(
         "Subset Summary",
         subset_summary_rows,
@@ -981,11 +901,6 @@ if __name__ == "__main__":
         correlation_summary_rows,
         ["Model", "Subset", "Metric", "Value"],
     )
-
-    # Pairwise comparison
-    # print("=== PAIRWISE ANALYSIS SIM ===")
-    # pairwise_x_y1_correlations(all_subset_data, x_index=1, y_index=2)
-    # print("=============================")
 
     # plot r values
     save_name = f"{test_name}_lot_r_{subsets_name}_{rel_comp_str}"
