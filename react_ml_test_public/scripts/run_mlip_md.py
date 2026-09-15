@@ -136,7 +136,7 @@ if __name__ == "__main__":
 
     constraint = None
 
-    # sanity check / logging of the configured CUDA device (see helpers/io.py)
+    # logging of the configured CUDA device (see helpers/io.py)
     check_cuda_setup(CUDA_DEVICE)
 
     # input YAML config path from a single command-line argument

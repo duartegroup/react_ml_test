@@ -494,10 +494,10 @@ def load_model_calculator(model_name: str,
             from mace.calculators import MACECalculator
 
             return MACECalculator(model_paths=f"{MODEL_DIR}/{model_name}.model",
-                                device=device,
-                                enable_cueq=enable_cueq,
-                                default_dtype=dtype,
-                                head=head
+                                  device=device,
+                                  enable_cueq=enable_cueq,
+                                  default_dtype=dtype,
+                                  head=head
                                 )
 
         elif model_loader == ANI_MODEL_LOADER:

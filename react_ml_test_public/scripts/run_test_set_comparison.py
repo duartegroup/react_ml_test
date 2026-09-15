@@ -6,11 +6,10 @@ import os
 import re
 from typing import Callable, List, Tuple
 
-import numpy as np
-import pandas as pd
-
 import ase
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import torch
 
 from react_ml_test_public.helpers import inputs as rmlt_inputs
@@ -66,9 +65,10 @@ CUDA_DEVICE = f"cuda:{CUDA_DEVICE_NUM}"
 if torch.cuda.is_available():
     torch.cuda.set_device(CUDA_DEVICE_NUM)
     torch.set_default_dtype(torch.float32)
-    print("CUDA Version: ", torch.version.cuda)
+    logger.info("CUDA Version: ", torch.version.cuda)
 else:
-    print("No CUDA device available, using CPU...")
+    CUDA_DEVICE = "cpu"
+    logger.warning("No CUDA device available, using CPU...")
 
 
 def run_model_comparison_on_test_set(model_names: List[str],

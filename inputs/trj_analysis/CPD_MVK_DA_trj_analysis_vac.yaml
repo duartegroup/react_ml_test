@@ -31,13 +31,9 @@ sample_str: "ts_gauss_"
 energy_str: "energy_"
 omol_energy_str: "energy_"
 model_names:
-  - GO-MACE-23
   - GO-MACE-23_${system_ft_name}_${n}_config_${energy_str}${sample_str}ft
-  - MACE-OFF23_medium
   - MACE-OFF23_${system_ft_name}_${n}_config_${energy_str}${sample_str}ft
-  - MACE-MP-0b3_medium
   - MACE-MP-0b3_medium_${system_ft_name}_${n}_config_${energy_str}${sample_str}ft
-  - MACE-omol-0-extra-large-1024
   - MACE-omol-0-extra-large-1024_${system_ft_name}_${n}_config_${omol_energy_str}${sample_str}ft
 
 # === 4. PLOT SETTINGS ===
