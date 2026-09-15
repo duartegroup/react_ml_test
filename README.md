@@ -76,7 +76,7 @@ For zero-shot and fine-tuned models for CPD + MVK DA system:
 
 Run: ```rmlt run-reaction-barrier-comparison inputs/irc/CPD_MVK_DA_IRC_barrier.yaml```.
 
-Output figures will be saved in `out/plt/trj_comp/`, `out/plt/index/`, and `out/csv/`, along with relevant values / statistics printed to the terminal.
+Output figures will be saved in `out/plt/irc/` and `out/csv/`, along with relevant values / statistics printed to the terminal.
 
 This script reproduces Figure 3c\) in the paper, along with relevant supplementary plots.
 

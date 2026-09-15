@@ -319,7 +319,7 @@ if __name__ == "__main__":
                                     show_legend=False,
                                     custom_alpha_list=custom_alpha_list,
                                     custom_linestyle_list=custom_linestyle_list)
-        save_fp = f"{PLOT_DIR}/trj_comp/{test_set_name}_{save_name}_energy_errors.png"
+        save_fp = f"{PLOT_DIR}/irc/{test_set_name}_{save_name}_energy_errors.png"
         index_plot(energy_errors,                   formatted_model_names,
                    save_fp,
                    plot_as_lines=[i for i in range(len(formatted_model_names))],  # or, only 0
@@ -338,7 +338,7 @@ if __name__ == "__main__":
         ref_prod_energy = combined_datasets[0][ref_prod_index]
 
         # produce plot of step vs. energy
-        save_fp = f"{PLOT_DIR}/trj_comp/{test_set_name}_{save_name}_reaction_plot.png"
+        save_fp = f"{PLOT_DIR}/irc/{test_set_name}_{save_name}_reaction_plot.png"
         step_plot_settings = PlotSettings(x_label=xlabel, 
                                     y_label=f"Potential Energy ({energy_units})",
                                     reference_indices=[0], 
@@ -387,7 +387,7 @@ if __name__ == "__main__":
                 model_force_norm_errors.append(np.array(config_ave_force_norm_errors))
 
             # index plot of force errors
-            save_fp = f"{PLOT_DIR}/trj_comp/{test_set_name}_{save_name}_force_errors.png"
+            save_fp = f"{PLOT_DIR}/irc/{test_set_name}_{save_name}_force_errors.png"
             plot_settings = plot_settings._replace(y_label=f"|DFT - Pred Force Norm| ({force_units})", 
                                                 custom_linestyle_list=custom_linestyle_list, ylim=forces_ylim)
             index_plot(model_force_norm_errors,
