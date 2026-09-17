@@ -7,11 +7,11 @@ from typing import Any, Dict, List, Optional  # noqa: UP035
 import torch
 from torch import nn
 
+from react_ml_test_public.helpers.io import resolve_cuda_device
 from react_ml_test_public.helpers.settings import MODEL_DIR, OUT_DIR
 
-DEVICE = torch.device("cuda:0")
-if not torch.cuda.is_available():
-    raise RuntimeError("CUDA is not available, but GPU loading was requested.")
+# 'cuda:0' by default, falling back to 'cpu' if that device is not available
+DEVICE = torch.device(resolve_cuda_device())
 
 def load_model_file(path: Path) -> Any:
     return torch.load(path, map_location=DEVICE, weights_only=False)

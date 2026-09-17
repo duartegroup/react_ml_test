@@ -1,0 +1,35 @@
+# TEMPORARY smoke-test input for README example 3.3 (trajectory analysis), GPU variant.
+# Analyses the trajectories written by ex3_md_go_mace_23_cuda.yaml.
+# Note: run_trajectory_analysis.py does no MLIP inference, so it takes no cuda_device
+# field - this YAML only differs from the _cpu one in the trajectory names it reads.
+
+# Run with:
+#   rmlt run-trajectory-analysis inputs/tmp_ex3/ex3_trj_analysis_cuda.yaml
+
+# === 1. TRAJECTORY SOURCE ===
+traj_type: CPD_MVK_DA_ex3_cuda_vac_opt_TS
+run_name: "300K_1.0ps"
+ts_ref_fp: data/reaction_data/CPD_MVK_DA/TS/CPD_MVK_DA_vac_TS_wB97M.xyz
+
+# === 2. REACTION COORDINATE / PRODUCT CONFIG DEFINITIONS ===
+num_solute_atoms: 22
+threshold: 1.8
+r1_atoms: [1, 12]
+r2_atoms: [6, 11]
+r3_atoms: [2, 17]
+config_defs:
+  - {name: RS, r1: false, r2: false}
+  - {name: PS, r1: true, r2: true}
+  - {name: PS2, r3: true}
+  - {name: PS3, r1: true, r2: false, r3: false}
+
+# === 3. MODELS (trajectory-name labels; must match the run_mlip_md config used) ===
+model_names:
+  - GO-MACE-23
+
+# === 4. PLOT SETTINGS ===
+save_name: CPD_MVK_DA_ex3_cuda_go_mace_23_trj_analysis
+traj_trunc: [3.5, 3.5]
+r1_range: [4.0, 1.0]
+r2_range: [5.0, 1.0]
+show_legend: false

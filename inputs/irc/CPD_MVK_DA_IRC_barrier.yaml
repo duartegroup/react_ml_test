@@ -52,3 +52,8 @@ cust_legend_colours: ["black"]
 cust_legend_labels: ["DFT"]
 cust_legend_linestyles: ["dashed"]
 # ref_point_labels: ["RS", "TS", "PS"]    # labels for the RS / TS / PS reference points
+
+# ---- run settings ----
+# device for the MLIP calculators; "cpu" can be set here, and a device that cannot be
+# found on this machine also falls back to "cpu"
+cuda_device: "cuda:0"

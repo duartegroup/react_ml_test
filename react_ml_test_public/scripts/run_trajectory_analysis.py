@@ -191,6 +191,13 @@ if __name__ == "__main__":
         struct_rmsd = aligned_rmsd(first_traj_config, ts_ref_config, num_solute_atoms)
         logger.info(f'MLIP OPT TS Structural RMSD: {struct_rmsd:.3f}\n')
 
+    if not all_model_trajectories:
+        raise FileNotFoundError(
+            f"No trajectories matching {traj_name_stubs} found in {traj_dir} - run "
+            f"run-mlip-md (and the matching run-mlip-ts-opt) first, or check 'traj_dir' / "
+            f"'model_names' / 'run_name' in the input YAML."
+        )
+
     # PLOT SETTINGS
     from matplotlib.ticker import MaxNLocator
     from scipy.stats import gaussian_kde

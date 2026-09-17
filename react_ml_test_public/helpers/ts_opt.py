@@ -45,7 +45,7 @@ def mlip_dimer_method(input_config_fp: str,
         out_dir (str, optional): Output directory. Defaults to OPT_DIR.
         displace_mag (float, optional): Magnitude of initial atomic displacement along reaction coordinate for dimer. Defaults to 0.05.
         fmax (float, optional): Optimisation convergence threshold. Defaults to 0.001.
-        cuda_device: which gpu device to use, default 'cuda:0'
+        cuda_device: which gpu device to use, default 'cuda:0' (falls back to 'cpu' if the device is not available)
         enable_cueq: enable cuequivariance speedup for MACE models (requires CUDA 12.0)
         box_dim: PBC box to override in input configuration for optimisation
         override_cache: whether to override previous runs of the same name

@@ -1,7 +1,9 @@
 import ase
 import ase.io
-from react_ml_test_public.helpers.logging import logger
 import numpy as np
+
+from react_ml_test_public.helpers.logging import logger
+
 
 def get_solv_shell(config: ase.Atoms,
                    solute_indices: list,

@@ -18,6 +18,7 @@ from react_ml_test_public.helpers.io import (
     flexible_ase_read,
     get_name_from_path,
     orca_props_parser,
+    resolve_cuda_device,
 )
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.model_eval import get_test_and_pred_data
@@ -59,17 +60,6 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
 pd.set_option('display.max_colwidth', None)
 
-# set CUDA device
-CUDA_DEVICE_NUM = 0
-CUDA_DEVICE = f"cuda:{CUDA_DEVICE_NUM}"
-if torch.cuda.is_available():
-    torch.cuda.set_device(CUDA_DEVICE_NUM)
-    torch.set_default_dtype(torch.float32)
-    logger.info("CUDA Version: ", torch.version.cuda)
-else:
-    CUDA_DEVICE = "cpu"
-    logger.warning("No CUDA device available, using CPU...")
-
 
 def run_model_comparison_on_test_set(model_names: List[str],
                                      test_set_fpaths: List[str],
@@ -88,7 +78,8 @@ def run_model_comparison_on_test_set(model_names: List[str],
                                      test_set_force_atom_ids: List[List[int]] = None,
                                      react_coords: List[Tuple[int]] = None,
                                      ref_ts_config: ase.Atoms = None,
-                                     enable_cueq: bool = False
+                                     enable_cueq: bool = False,
+                                     cuda_device: str = "cuda:0"
                                     ):
 
     """
@@ -100,6 +91,7 @@ def run_model_comparison_on_test_set(model_names: List[str],
     :param model_fpaths: a list of file paths to .model objects to be evaluated
     :param test_set_fpaths: a list of file paths to .xyz files (which should include reference energies and forces)
     :param test_set_force_atom_ids: a list of atom ids per test set (so a list of lists) to only be considered for force errors (i.e. reactants in solvent)
+    :param cuda_device: device for the MLIP calculators ('cuda:0' default, 'cpu' to force CPU)
     :return:
     """
 
@@ -113,6 +105,7 @@ def run_model_comparison_on_test_set(model_names: List[str],
                                                                                                               custom_xyz_parsers=custom_xyz_parsers,
                                                                                                               pbc_box=pbc_box,
                                                                                                               config_type_filter=config_type_filter,
+                                                                                                              cuda_device=cuda_device,
                                                                                                               enable_cueq=enable_cueq)
 
     # filter only specific atom ids for force comparisons
@@ -464,6 +457,8 @@ if __name__ == "__main__":
         num_base_models:        # number of base models.
         num_base_model_comps:   # number of comparisons per base model.
         alpha_list:             # alpha values used for plotting.
+        cuda_device:            # GPU device for the MLIP calculators (default "cuda:0",
+                                # falls back to "cpu" if that device is not found).
 
     Any omitted field is set to None.
     """
@@ -512,7 +507,13 @@ if __name__ == "__main__":
     num_base_models = resolved["num_base_models"]
     num_base_model_comps = resolved["num_base_model_comps"]
     alpha_list = resolved["alpha_list"]
+    cuda_device = resolved["cuda_device"]
     del resolved
+
+    # resolve the requested device (i.e. fall back to 'cpu' if the GPU is not available)
+    cuda_device = resolve_cuda_device(cuda_device)
+    if cuda_device != "cpu":
+        torch.set_default_dtype(torch.float32)
 
     energies_ylim, forces_ylim = (-0.1, 120), (7.0, 1001.0)
 
@@ -826,5 +827,6 @@ if __name__ == "__main__":
                                          test_set_force_atom_ids=test_set_force_atom_ids,
                                          react_coords=react_coords,
                                          ref_ts_config=ref_ts_config,
-                                         enable_cueq=enable_cueq
+                                         enable_cueq=enable_cueq,
+                                         cuda_device=cuda_device
                                          )

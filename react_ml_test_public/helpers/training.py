@@ -7,7 +7,7 @@ import random
 import shutil
 import subprocess
 from typing import Callable, Union
-from react_ml_test_public.helpers.io import flexible_ase_read, get_name_from_path, get_dir_from_path
+from react_ml_test_public.helpers.io import flexible_ase_read, get_name_from_path, get_dir_from_path, resolve_cuda_device
 from react_ml_test_public.helpers.model_eval import get_test_and_pred_data
 from react_ml_test_public.helpers.settings import MODEL_DIR, MACEArchitectSettings, MACETrainSettings
 from react_ml_test_public.helpers.logging import logger
@@ -42,6 +42,9 @@ def train_mace(train_fpath: str,
     pt_train_str = f" with multihead training on {pt_train_fpath} " if pt_train_fpath is not None else ""
     print(f"Training {model_save_name} model on {train_fpath}{pt_train_str}...")
 
+    # resolve the requested training device, so a missing / unavailable GPU trains on CPU
+    train_device = resolve_cuda_device(train_settings.device)
+
     # run mace training script as sub-process
     mace_train_script = f"""
     mace_run_train \
@@ -59,7 +62,7 @@ def train_mace(train_fpath: str,
     --amsgrad \
     --energy_key="{train_settings.energy_key}" \
     --forces_key="{train_settings.forces_key}" \
-    --device={train_settings.device} \
+    --device={train_device} \
     --error_table="PerAtomRMSE" \
     --wandb \
     --wandb_project={train_settings.wandb_project} \

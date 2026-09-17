@@ -17,7 +17,7 @@ def get_trajectory_with_ase(init_config: ase.Atoms,
                             output_name: str,
                             out_dir: str = TRAJ_DIR,
                             constraint: str = None, # IndexedConstraint = None,
-                            cuda_device: str = "cuda:0",
+                            cuda_device: str = "cuda:0",  # falls back to 'cpu' if unavailable
                             override_cache: bool = False):
     """
 

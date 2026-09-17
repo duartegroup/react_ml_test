@@ -97,3 +97,8 @@ plot_settings:
     ylim: [-200.0, 1000.0]
     log_y: false
     remove_negs: false
+
+# ---- run settings ----
+# device for the MLIP calculators; "cpu" can be set here, and a device that cannot be
+# found on this machine also falls back to "cpu"
+cuda_device: "cuda:0"

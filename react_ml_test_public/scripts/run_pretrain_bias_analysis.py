@@ -14,6 +14,7 @@ from react_ml_test_public.helpers.io import (
     get_ase_atoms_forces,
     get_name_from_path,
     load_data_cache,
+    resolve_cuda_device,
     save_npz_data_cache,
 )
 from react_ml_test_public.helpers.model_eval import (
@@ -258,14 +259,9 @@ def category_scatter_plot(all_series: list[np.array],
     x = np.array(range(len(subset_names)))
 
     # scatter plot
-    major_offset = 0.1
-    minor_offset = 0.05
     plt.figure(figsize=SINGLE_COLUMN_FIG_SIZE, dpi=DPI)
-    normalise = False
-    line_styles = ['dotted', '-', '-', 'dotted', '-', '-']
     marker_styles = [0, 1, 2, 0, 1, 2]
     n = 3
-    num_base_model_comps = 3
     major_offsets = [(k - (n - 1) / 2) * 0.16 for k in range(n)]
     for i, model_series in enumerate(all_series):
         colour = PAPER_MODEL_COLOURS[base_model_names[i]]
@@ -310,11 +306,11 @@ def category_scatter_plot(all_series: list[np.array],
     if show_legend:
         plt.legend()
 
+    plt.xlabel('Config Type', fontsize=10)
+    plt.ylabel(y_label, fontsize=10)
     plt.gca().set_position([0.18, 0.15, 0.75, 0.72])
     plt.gca().set_xticks(x)
     plt.gca().set_xticklabels(subset_names, fontsize=10)
-    plt.xlabel('Config Type', fontsize=10)
-    plt.ylabel(y_label, fontsize=10)
     # plt.tight_layout()
 
     # save plot
@@ -323,7 +319,6 @@ def category_scatter_plot(all_series: list[np.array],
     print(f"Saved plot to {save_fp}")
     plt.close()
  
-
 
 if __name__ == "__main__":
 
@@ -382,6 +377,10 @@ if __name__ == "__main__":
         subset_names:           # labels for each entry of atom_type_specs.
         subsets_name:           # short name for this subset scheme (used in output names).
         atom_id_cap:            # upper atom index for "solvent" selections (default 500).
+
+    Run settings (optional):
+        cuda_device:            # GPU device for the MLIP calculators (default "cuda:0",
+                                # falls back to "cpu" if that device is not found).
 
     Plot settings (all optional):
         plot_settings:
@@ -468,7 +467,11 @@ if __name__ == "__main__":
     scatter_mag_ylim = resolved["scatter_mag_ylim"]
     mag_log_y = resolved["mag_log_y"]
     mag_remove_negs = resolved["mag_remove_negs"]
+    cuda_device = resolved["cuda_device"]
     del resolved
+
+    # resolve the requested device (i.e. fall back to 'cpu' if the GPU is not available)
+    cuda_device = resolve_cuda_device(cuda_device)
 
     abs_func = np.abs if abs_y else (lambda x: x)
 
@@ -501,7 +504,8 @@ if __name__ == "__main__":
 
         # calc model errors + sort
         all_test_energies, all_test_forces, all_pred_energies_dict, all_pred_forces_dict = get_test_and_pred_data(pred_models,
-                                                                                                                   [test_fpath])
+                                                                                                                   [test_fpath],
+                                                                                                                   cuda_device=cuda_device)
         # energies
         test_energies = np.array([all_test_energies[0][i] for i in test_sorted_indices])       
         zero_shot_pred_energies = np.array([all_pred_energies_dict[model_name][0][i] for i in test_sorted_indices])

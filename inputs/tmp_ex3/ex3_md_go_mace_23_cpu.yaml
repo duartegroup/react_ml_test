@@ -1,0 +1,29 @@
+# TEMPORARY smoke-test input for README example 3.2 (downhill dynamics), CPU variant.
+# Same as ex3_md_go_mace_23_cuda.yaml but cuda_device: "cpu" (starts from the CPU TS
+# optimisation output, so the two variants write separate trajectories to out/trj).
+
+# Run with:
+#   rmlt run-mlip-md inputs/tmp_ex3/ex3_md_go_mace_23_cpu.yaml
+
+# === 1. SYSTEM / STARTING CONFIGS ===
+system_name: CPD_MVK_DA_ex3_cpu
+include_solvent: false
+solvent_name: None
+
+# === 2. MD SETTINGS (shortened for a smoke test) ===
+fs: 1000               # number of MD steps run by ase (dt 0.5 fs -> 1 ps of dynamics)
+temp: 300
+dt: 0.5
+interval: 20           # frame-saving interval
+md_method: "ase"
+num_init_configs: 1
+md_runs_per_config: 1
+
+# === 3. MODELS (zero-shot GO-MACE-23 only) ===
+model_names:
+  - GO-MACE-23
+
+# === 4. RUN OPTIONS ===
+enable_cueq: false
+override_saved: false
+cuda_device: "cpu"

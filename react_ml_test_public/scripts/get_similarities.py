@@ -5,12 +5,11 @@ Script for calculating cosine similarities between two sets of input descriptors
 
 
 import numpy as np
-import torch
 from ase.data import atomic_numbers
 
 
 from react_ml_test_public.helpers.dim_red import calc_best_similarities
-from react_ml_test_public.helpers.io import get_name_from_path, load_data_cache
+from react_ml_test_public.helpers.io import get_name_from_path, load_data_cache, resolve_cuda_device
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.settings import (
     CPD_MVK_DA_DATA_DIR,
@@ -24,11 +23,7 @@ from react_ml_test_public.helpers.settings import (
 )
 
 # set CUDA device
-CUDA_DEVICE_NUM = 0
-
-CUDA_DEVICE = f"cuda:{CUDA_DEVICE_NUM}"
-if torch.cuda.is_available():
-    torch.cuda.set_device(CUDA_DEVICE_NUM)
+CUDA_DEVICE = resolve_cuda_device()  # 'cuda:0' by default, falling back to 'cpu'
 
 if __name__ == "__main__":
 

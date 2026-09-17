@@ -13,6 +13,8 @@ An ORA repository of trained models, data, and other supplementary results can b
    ```bash
    conda activate mlptrain-mace
    pip install hdf5plugin
+   pip install --upgrade mace-torch
+   pip install --upgrade ase
    ```
 
 3. Install this package into the environment. **This install is required** — it provides the
@@ -25,6 +27,7 @@ An ORA repository of trained models, data, and other supplementary results can b
 
 Notes:
 - Run all scripts from the repository root directory. The scripts read `data/`, `models/`, `inputs/` and write to `out/` relative to the current working directory, so they must be launched from the repo root (or a directory containing these folders).
+- Every YAML input that runs MLIP calculations takes a `cuda_device` field (default `"cuda:0"`). Set it to `"cpu"` to run on CPU, or to another GPU index (e.g. `"cuda:1"`) to pick a different card. If the requested device is not found on the machine — no GPU at all, or an index that does not exist — the scripts log a warning and fall back to `"cpu"` rather than failing. CPU runs also work on machines where CUDA is not visible to PyTorch at all: MACE models embed compiled e3nn submodules that e3nn reloads with a device-preserving `torch.jit.load`, so `load_model_calculator` injects the requested device into that call (`_jit_load_on_device` in `react_ml_test_public/helpers/io.py`).
 - Only lightweight, PyPI-only dependencies are listed in `pyproject.toml`. The MLIP stack (MACE, mlptrain, autode, torchani, graph-pes, load-atoms, etc.) is installed via the `mlptrain-mace` environment.
 - For some features a specific fork of MACE is required (e.g. train loss logging + patience warmup, please let me know if you need these features!)
 - To run the ani-1nxr model, you must have the neurchem project in the parent directory of this repo. You must also then ensure you have the `libcublas.so.9.2` file (from CUDA 9.2) added to the `LD_LIBRARY_PATH`.
@@ -52,7 +55,7 @@ python -m react_ml_test_public.scripts.run_test_set_comparison
 
 ## Examples
 
-Note: these examples will load precalculated .npz results to produce figures, as running the calculations requires a GPU and the respective models. To run the examples below: .npz files of saved results in the ORA repository (`results/npz`) linked at the top of this file should be copied to `react_ml_test_public/out/npz`, and models from the ORA repository (`models/`) should be copied to `react_ml_test_public/models/`. If you wish to re-calculate results from scratch, clear all cache .npz files by running `rmlt clear-npz-cache`. 
+Note: these examples will load precalculated .npz results to produce figures, as running the calculations requires the respective models (and a GPU is recommended, although each YAML's `cuda_device` can be set to `"cpu"`). To run the examples below: .npz files of saved results in the ORA repository (`results/npz`) linked at the top of this file should be copied to `react_ml_test_public/out/npz`, and models from the ORA repository (`models/`) should be copied to `react_ml_test_public/models/`. If you wish to re-calculate results from scratch, clear all cache .npz files by running `rmlt clear-npz-cache`. 
 
 ### 1. Test set energy + force errors:
 

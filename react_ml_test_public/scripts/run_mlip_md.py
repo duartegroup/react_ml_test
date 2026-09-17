@@ -9,7 +9,6 @@ import os
 # from ase.constraints.constraint import IndexedConstraint
 from time import time
 
-import torch
 from ase.constraints import FixAtoms
 from ase.io import read
 
@@ -34,13 +33,6 @@ from react_ml_test_public.helpers.settings import (
     MDSettings,
 )
 
-# set CUDA device
-CUDA_DEVICE_NUM = 0
-CUDA_DEVICE = f"cuda:{CUDA_DEVICE_NUM}"
-
-if torch.cuda.is_available():
-    torch.cuda.set_device(CUDA_DEVICE_NUM)
-
 
 def run_md_eval(init_configs: list,
                 md_config: MDSettings,
@@ -51,7 +43,7 @@ def run_md_eval(init_configs: list,
                 constraint: str = None,# IndexedConstraint = None,
                 enable_cueq: bool = False,
                 override_saved: bool = False,
-                cuda_device: str = CUDA_DEVICE):
+                cuda_device: str = "cuda:0"):
 
     trajectories = []
     for i in range(len(init_configs)):
@@ -125,7 +117,8 @@ if __name__ == "__main__":
 
         enable_cueq:          # use the cuEquivariance MACE speed-up (CUDA 12+).
         override_saved:       # re-run MD even if a saved trajectory already exists.
-        cuda_device:          # GPU device for the MLIP calculators.
+        cuda_device:          # GPU device for the MLIP calculators (default "cuda:0",
+                              # falls back to "cpu" if that device is not found).
 
     formatted_model_names are built in the script: fine-tuned entries of this training set get
     a compact "<label>_<system_ft_name>_<n>_config_<energy><sample_str>ft" label, other entries
@@ -135,9 +128,6 @@ if __name__ == "__main__":
     """
 
     constraint = None
-
-    # logging of the configured CUDA device (see helpers/io.py)
-    check_cuda_setup(CUDA_DEVICE)
 
     # input YAML config path from a single command-line argument
     parser = argparse.ArgumentParser(
@@ -185,6 +175,9 @@ if __name__ == "__main__":
     override_saved = resolved["override_saved"]
     cuda_device = resolved["cuda_device"]
     del resolved
+
+    # resolve the requested device (i.e. fall back to 'cpu' if the GPU is not available)
+    cuda_device = check_cuda_setup(cuda_device)
 
     md_config = MDSettings(fs=fs, temp=temp, dt=dt, interval=interval, md_method=md_method)
 

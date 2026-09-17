@@ -12,6 +12,7 @@ from react_ml_test_public.helpers import inputs as rmlt_inputs
 from react_ml_test_public.helpers.io import (
     flexible_ase_read,
     get_name_from_path,
+    resolve_cuda_device,
 )
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.model_eval import get_test_and_pred_data
@@ -38,17 +39,6 @@ from react_ml_test_public.helpers.utils import (
     get_formatted_model_name,
     natural_sort_key,
 )
-
-# set CUDA device
-CUDA_DEVICE_NUM = 0
-CUDA_DEVICE = f"cuda:{CUDA_DEVICE_NUM}"
-
-if torch.cuda.is_available():
-    torch.cuda.set_device(CUDA_DEVICE_NUM)
-    torch.set_default_dtype(torch.float32)
-    print("CUDA Version: ", torch.version.cuda)
-else:
-    print("No CUDA device available, using CPU...")
 
 if __name__ == "__main__":
 
@@ -94,6 +84,8 @@ if __name__ == "__main__":
         cust_legend_labels:     # legend labels for the reference (DFT) line.
         cust_legend_linestyles: # legend line styles for the reference (DFT) line.
         ref_point_labels:       # labels for the RS / TS / PS reference points (or empty).
+        cuda_device:            # GPU device for the MLIP calculators (default "cuda:0",
+                                # falls back to "cpu" if that device is not found).
 
     Any omitted field is set to None.
     """
@@ -147,7 +139,13 @@ if __name__ == "__main__":
     energy_units = resolved["energy_units"]
     energies_ylim = resolved["energies_ylim"]
     forces_ylim = resolved["forces_ylim"]
+    cuda_device = resolved["cuda_device"]
     del resolved
+
+    # resolve the requested device (i.e. fall back to 'cpu' if the GPU is not available)
+    cuda_device = resolve_cuda_device(cuda_device)
+    if cuda_device != "cpu":
+        torch.set_default_dtype(torch.float32)
 
     # ===== derived plot lists =====
     labels = [get_formatted_model_name(model_name) for model_name in model_names]
@@ -296,7 +294,7 @@ if __name__ == "__main__":
                                                                                                                 custom_xyz_parsers=[custom_xyz_parser],
                                                                                                                 energy_units=energy_units,
                                                                                                                 force_units=force_units,
-                                                                                                                cuda_device=CUDA_DEVICE)
+                                                                                                                cuda_device=cuda_device)
                                                                                                                 
         combined_datasets = all_test_energies
         combined_datasets.extend([pred_energies 

@@ -36,7 +36,8 @@ def get_model_predictions(model_name: str,
         offset_ref_fpath (str): Path to reference offset file for energy adjustment. Optional.
         pred_isolated_atom_fpath (str): Path to isolated atom predictions for reference. Optional.
         custom_xyz_parsers (List[Callable]): Custom parser functions for reading XYZ files. Optional.
-        cuda_device (str): CUDA device identifier, e.g., 'cuda:0'. Defaults to 'cuda:0'.
+        cuda_device (str): CUDA device identifier, e.g., 'cuda:0'. Defaults to 'cuda:0',
+                           falling back to 'cpu' if that device is not available.
         pbc_box (List[float]): Dimensions of the periodic boundary condition box, if applicable. Optional.
         energy_units (Literal['meV', 'meV / atom']): Desired output units for energy. Defaults to 'meV / atom'.
         force_units (Literal['meV', 'meV / A']): Desired output units for forces. Defaults to 'meV / A'.
@@ -157,7 +158,8 @@ def get_test_and_pred_data(model_names: List[str],
         offset_ref_fpath (str): Path to reference offset file for energy adjustment. Optional.
         pred_isolated_atom_fpath (str): Path to isolated atom predictions for reference. Optional.
         custom_xyz_parsers (List[Callable]): Custom parser functions for reading XYZ files. Optional.
-        cuda_device (str): CUDA device identifier, e.g., 'cuda:0'. Defaults to 'cuda:0'.
+        cuda_device (str): CUDA device identifier, e.g., 'cuda:0'. Defaults to 'cuda:0',
+                           falling back to 'cpu' if that device is not available.
         pbc_box (List[float]): Dimensions of the periodic boundary condition box, if applicable. Optional.
         energy_units (Literal['meV', 'meV / atom']): Output units for energy. Defaults to 'meV / atom'.
         force_units (Literal['meV', 'meV / A']): Output units for forces. Defaults to 'meV / A'.

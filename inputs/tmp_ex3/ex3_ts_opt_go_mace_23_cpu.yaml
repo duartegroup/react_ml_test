@@ -1,0 +1,30 @@
+# TEMPORARY smoke-test input for README example 3.1 (TS optimisation), CPU variant.
+# Same as ex3_ts_opt_go_mace_23_cuda.yaml but cuda_device: "cpu" (and a distinct
+# save_name, so the CPU and GPU results do not overwrite each other).
+
+# Run with:
+#   rmlt run-mlip-ts-opt inputs/tmp_ex3/ex3_ts_opt_go_mace_23_cpu.yaml
+
+# === 1. SELECT INPUT CONFIG (TS GUESS) ===
+save_name: CPD_MVK_DA_ex3_cpu
+react_coords: [[1, 12], [6, 11]]
+num_solute_atoms: 22
+input_config_fp: data/reaction_data/CPD_MVK_DA/TS/CPD_MVK_DA_TS_MMFF.xyz
+ref_config_fp: data/reaction_data/CPD_MVK_DA/TS/CPD_MVK_DA_vac_TS_wB97M.xyz
+reverse_displace: false
+
+# === 2. SELECT MODEL (zero-shot GO-MACE-23 only) ===
+model_names:
+  - GO-MACE-23
+
+# === 3. SOLVENT (off: vacuum run) ===
+include_solvent: false
+solv_shell_cutoff: 0.0
+
+# === 4. OPTIMISER / RUN SETTINGS ===
+out_dir: out/opt
+fmax: 0.001
+displace_mag: 0.05
+enable_cueq: false
+override_cache: false
+cuda_device: "cpu"

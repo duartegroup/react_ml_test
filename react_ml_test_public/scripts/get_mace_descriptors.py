@@ -6,8 +6,6 @@ Script for calculating MACE descriptors for a given input dataset.
 
 import time
 
-import torch
-
 
 from react_ml_test_public.helpers.descriptors import get_mace_descriptors, get_soap_descriptors
 from react_ml_test_public.helpers.io import (
@@ -15,6 +13,7 @@ from react_ml_test_public.helpers.io import (
     get_name_from_path,
     get_xyz_file_len,
     load_model_calculator,
+    resolve_cuda_device,
 )
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.settings import (
@@ -28,11 +27,8 @@ from react_ml_test_public.helpers.settings import (
     PLOT_DIR,
 )
 
-# set CUDA device
-CUDA_DEVICE_NUM = 0
-
-CUDA_DEVICE = f"cuda:{CUDA_DEVICE_NUM}"
-torch.cuda.set_device(CUDA_DEVICE_NUM)
+# device for the MACE models ('cuda:0' by default, falling back to 'cpu' if unavailable)
+CUDA_DEVICE = resolve_cuda_device()
 
 if __name__ == "__main__":
 

@@ -4,7 +4,12 @@ Script to get vibrational frequency summary for an input geometry with a set of 
 from ase import Atoms
 from ase.calculators.calculator import Calculator
 
-from react_ml_test_public.helpers.io import flexible_ase_read, get_name_from_path, load_model_calculator
+from react_ml_test_public.helpers.io import (
+    flexible_ase_read,
+    get_name_from_path,
+    load_model_calculator,
+    resolve_cuda_device,
+)
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.settings import (
     ANTHRACENE_DA_DATA_DIR,
@@ -20,7 +25,7 @@ from react_ml_test_public.helpers.ts_opt import get_vib_freq
 if __name__ == "__main__":
 
     out_dir = VIB_DIR
-    cuda_device = 'cuda:0'
+    cuda_device = resolve_cuda_device()  # 'cuda:0' by default, falling back to 'cpu'
     enable_cueq = False
 
     # === 1. SELECT MODEL ===

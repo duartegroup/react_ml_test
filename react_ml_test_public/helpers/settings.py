@@ -64,7 +64,7 @@ GRAPH_PES_MODEL_LOADER = 'graph-pes'
 MODEL_LOADERS = [MACE_MODEL_LOADER, ANI_MODEL_LOADER, GRAPH_PES_MODEL_LOADER]
 
 # input data directories
-DATA_DIR =  f"{root_data_dir}data" if any(x in platform.node() for x in ('htc', 'arc')) else "data"
+DATA_DIR =  f"{root_data_dir}data"
 
 DATASETS_DIR = f"{DATA_DIR}/datasets"
 DA_PAPER_DATA_DIR = f"{DATASETS_DIR}/da_paper_data"
@@ -205,7 +205,7 @@ class MACETrainSettings(NamedTuple):
     patience: int = None              # early stopping patience, how many epochs without valid_loss improvement to stop training
     patience_warmup: int = None       # num epochs to wait before patience becomes active (helps with early volatile models)
     valid_batch_size: int = None      # validation batch size, should not affect convergence (except for slight noise), but can save on GPU MEM
-    device: str = "cuda"
+    device: str = "cuda:0"             # resolved to 'cpu' at training time if unavailable
     enable_cueq: bool = False
     dtype: str = "float64"
     

@@ -3,6 +3,7 @@ IO file helpers.
 """
 import os
 import re
+from contextlib import contextmanager
 from typing import Callable, Dict, List, Literal, Union
 import ase
 from ase.io import read
@@ -431,110 +432,212 @@ def check_orca_outputs(work_dir: str, input_name: str):
     print("=========================")
 
 
-def check_cuda_setup(cuda_device: str = "cuda:0") -> bool:
-    """Quick sanity check / logging of the configured PyTorch CUDA device.
+def resolve_cuda_device(cuda_device: str = "cuda:0") -> str:
+    """Resolve a requested torch device onto one that actually exists on this machine.
 
-    Logs whether CUDA is available and the current device name, then moves a small test
-    tensor onto ``cuda_device`` (or CPU when CUDA is unavailable) and logs where it ends
-    up. Returns True if CUDA is available.
+    ``cuda_device`` is the device requested by a script default or an input YAML
+    (e.g. 'cuda:0' (the default), 'cuda:1', 'cuda' or 'cpu'). The returned device is
+    always usable:
+
+      * an explicit 'cpu' request is kept as-is,
+      * a CUDA request falls back to 'cpu' when CUDA is unavailable, when the requested
+        GPU index is out of range (e.g. 'cuda:1' on a single-GPU machine), when the
+        device string cannot be understood, or when the GPU cannot be initialised.
+
+    When a CUDA device resolves it is also set as the current torch CUDA device, so
+    implicit 'cuda' usage agrees with it.
 
     ``torch`` is imported lazily so that importing this module does not pull in the
     PyTorch stack.
     """
     import torch
 
-    cuda_available = torch.cuda.is_available()
-    logger.info(f"CUDA is available: {cuda_available}")
+    # a missing / blank / 'None' request means the default GPU
+    requested = "cuda:0" if cuda_device is None else str(cuda_device).strip()
+    if requested == "" or requested.lower() == "none":
+        requested = "cuda:0"
 
-    # Check the default device
-    if cuda_available:
-        logger.info(f"Current device: {torch.cuda.current_device()}")
-        logger.info(f"Device name: {torch.cuda.get_device_name(torch.cuda.current_device())}")
-    else:
-        logger.info("CUDA is not available.")
+    # CPU explicitly requested
+    if requested.lower() == "cpu":
+        logger.info("Using CPU (cuda_device: 'cpu')...")
+        return "cpu"
 
-    # Create a tensor and move it to the GPU if available
-    device = torch.device(cuda_device if cuda_available else "cpu")
-    tensor = torch.tensor([1.0, 2.0, 3.0]).to(device)
+    if not requested.lower().startswith("cuda"):
+        logger.warning(f"Unrecognised cuda_device: {requested!r}, using CPU instead...")
+        return "cpu"
 
-    # Check if the tensor is on GPU
+    # 'cuda' with no index means the default device, 'cuda:N' means device N
+    index = 0
+    if requested.lower() != "cuda":
+        try:
+            index = int(requested.rsplit(":", 1)[1])
+        except (IndexError, ValueError):
+            logger.warning(f"Unrecognised cuda_device: {requested!r}, using CPU instead...")
+            return "cpu"
+
+    if not torch.cuda.is_available():
+        logger.warning(f"Requested device {requested!r} but CUDA is not available, using CPU...")
+        return "cpu"
+
+    num_devices = torch.cuda.device_count()
+    if not 0 <= index < num_devices:
+        logger.warning(f"Requested device {requested!r} but only {num_devices} CUDA "
+                       f"device(s) found, using CPU...")
+        return "cpu"
+
+    resolved_device = f"cuda:{index}"
+    try:
+        torch.cuda.set_device(index)
+        device_name = torch.cuda.get_device_name(index)
+    except Exception as e:  # e.g. driver / device initialisation failures
+        logger.warning(f"Could not use {resolved_device}: {e} \n... Using CPU instead...")
+        return "cpu"
+
+    logger.info(f"Using device {resolved_device} ({device_name})...")
+    return resolved_device
+
+
+def check_cuda_setup(cuda_device: str = "cuda:0") -> str:
+    """Log the device that will be used and return it.
+
+    ``cuda_device`` is resolved first (see ``resolve_cuda_device``), so a requested GPU
+    that is not present on this machine falls back to 'cpu' rather than failing later
+    when a calculator is built. A small test tensor is then moved onto the resolved
+    device and its location logged.
+
+    Returns the resolved device string ('cuda:N' or 'cpu'), which callers should pass
+    on to their calculators.
+
+    ``torch`` is imported lazily so that importing this module does not pull in the
+    PyTorch stack.
+    """
+    import torch
+
+    resolved_device = resolve_cuda_device(cuda_device)
+    logger.info(f"CUDA is available: {torch.cuda.is_available()}")
+
+    # Create a tensor and move it onto the resolved device
+    tensor = torch.tensor([1.0, 2.0, 3.0]).to(torch.device(resolved_device))
+
+    # Check where the tensor ended up
     logger.info(f"Tensor device: {tensor.device}")
-    return cuda_available
+    return resolved_device
+
+
+@contextmanager
+def _jit_load_on_device(device: str):
+    """Force ``torch.jit.load`` onto ``device`` for the duration of the block.
+
+    MACE models embed compiled e3nn ``CodeGenMixin`` submodules, and e3nn restores them
+    with a bare ``torch.jit.load(buffer)`` - no ``map_location`` (e3nn
+    ``util/codegen/_mixin.py``, still the case in e3nn 0.4.4 and upstream). Without a
+    ``map_location`` that call reproduces the device the model was saved on, which is
+    normally a GPU, so loading such a model on a machine where that GPU is not visible
+    raises ``RuntimeError: No CUDA GPUs are available`` - even when the calculator was
+    asked to run on the CPU, and no outer ``map_location`` (passed to ``torch.load``, or
+    MACE's own ``extract_load``) can reach the nested call.
+
+    Injecting ``map_location`` here is the same handling MACE uses when it loads
+    TorchScript itself (``mace.tools.scripts_utils.load_from_json``), and it also keeps
+    the submodules on the requested device when a non-default GPU index is selected.
+
+    ``torch`` is imported lazily so that importing this module does not pull in the
+    PyTorch stack.
+    """
+    import torch
+
+    original_jit_load = torch.jit.load
+
+    def jit_load(f, map_location=None, *args, **kwargs):
+        return original_jit_load(f, map_location=map_location or device, *args, **kwargs)
+
+    torch.jit.load = jit_load
+    try:
+        yield
+    finally:
+        torch.jit.load = original_jit_load
 
 
 def load_model_calculator(model_name: str,
-                          device='cuda:0', 
+                          device='cuda:0',
                           model_loader: Literal['MACE', 'ani', 'graph-pes'] = None,
                           enable_cueq: bool = False,
                           dtype: Literal["", "float32", "float64"] = "",
                           head: str = "Default"):
     """
     Flexible model loader for different types of model based on model_name (i.e. ACE models/ MACE models / ANI models / transformer models etc.)
+
+    ``device`` is resolved first (see ``resolve_cuda_device``), so the default 'cuda:0' -
+    and any 'cuda:N' that is not present on this machine - falls back to 'cpu'.
     """
 
+    # resolve the requested device before building any calculator
+    device = resolve_cuda_device(device)
+
     try:
+        with _jit_load_on_device(device):
 
-        # attempt to load model_loader from model name
-        if model_loader is None:
+            # attempt to load model_loader from model name
+            if model_loader is None:
 
-            if model_name in MACE_MODELS:
-                model_loader = MACE_MODEL_LOADER
-            elif model_name in ANI_MODELS:
-                model_loader = ANI_MODEL_LOADER
-            elif any(sub_model_name in model_name for sub_model_name in MACE_MODELS + ['MACE', 'EGRET']):
-                model_loader = MACE_MODEL_LOADER
-            elif any(sub_model_name in model_name for sub_model_name in ANI_MODELS):
-                model_loader = ANI_MODELS
+                if model_name in MACE_MODELS:
+                    model_loader = MACE_MODEL_LOADER
+                elif model_name in ANI_MODELS:
+                    model_loader = ANI_MODEL_LOADER
+                elif any(sub_model_name in model_name for sub_model_name in MACE_MODELS + ['MACE', 'EGRET']):
+                    model_loader = MACE_MODEL_LOADER
+                elif any(sub_model_name in model_name for sub_model_name in ANI_MODELS):
+                    model_loader = ANI_MODELS
+                else:
+                    model_loader = MACE_MODEL_LOADER  # default to MACE model loader!
+
+            if model_loader == MACE_MODEL_LOADER:
+
+                # mace model loader (imported lazily to keep io.py importable without MACE)
+                from mace.calculators import MACECalculator
+
+                return MACECalculator(model_paths=f"{MODEL_DIR}/{model_name}.model",
+                                      device=device,
+                                      enable_cueq=enable_cueq,
+                                      default_dtype=dtype,
+                                      head=head
+                                    )
+
+            elif model_loader == ANI_MODEL_LOADER:
+
+                # ani model loader (torchani imported lazily)
+                import torchani
+
+                # read constants from constant file and construct AEV computer.
+                const_fpath = f'{ANI_1XNR_MODEL_DIR}/{model_name}/rHCNO-5.2R_32-3.5A_a8-4.params'  # noqa: E501
+                consts = torchani.neurochem.Constants(const_fpath)
+                aev_computer = torchani.AEVComputer(**consts)
+
+                # read self energies and construct energy shifter.
+                sae_fpath = f'{ANI_1XNR_MODEL_DIR}/{model_name}/sae_linfit.dat'  # noqa: E501
+                energy_shifter = torchani.neurochem.load_sae(sae_fpath)
+
+                # single model
+                model_dir = f'{ANI_1XNR_MODEL_DIR}/{model_name}/train0/networks'  # noqa: E501
+                model = torchani.neurochem.load_model(consts.species, model_dir)
+
+                # create pipeline for computing energies
+                nnp = torchani.nn.Sequential(aev_computer, model, energy_shifter)
+
+                # get torchani ASE calculator (calculates in Hartrees)
+                return torchani.ase.Calculator(consts.species, nnp)
+
+            elif model_loader == GRAPH_PES_MODEL_LOADER:
+
+                from graph_pes.models import load_model
+                import torch
+
+                model = load_model(f"{MODEL_DIR}/{model_name}.model")
+                model.to(dtype=torch.float64)
+                return model.ase_calculator()
             else:
-                model_loader = MACE_MODEL_LOADER  # default to MACE model loader!
+                raise NameError(f"Model loader: {model_loader} is not valid.")
 
-        if model_loader == MACE_MODEL_LOADER:
-
-            # mace model loader (imported lazily to keep io.py importable without MACE)
-            from mace.calculators import MACECalculator
-
-            return MACECalculator(model_paths=f"{MODEL_DIR}/{model_name}.model",
-                                  device=device,
-                                  enable_cueq=enable_cueq,
-                                  default_dtype=dtype,
-                                  head=head
-                                )
-
-        elif model_loader == ANI_MODEL_LOADER:
-
-            # ani model loader (torchani imported lazily)
-            import torchani
-
-            # read constants from constant file and construct AEV computer.
-            const_fpath = f'{ANI_1XNR_MODEL_DIR}/{model_name}/rHCNO-5.2R_32-3.5A_a8-4.params'  # noqa: E501
-            consts = torchani.neurochem.Constants(const_fpath)
-            aev_computer = torchani.AEVComputer(**consts)
-
-            # read self energies and construct energy shifter.
-            sae_fpath = f'{ANI_1XNR_MODEL_DIR}/{model_name}/sae_linfit.dat'  # noqa: E501
-            energy_shifter = torchani.neurochem.load_sae(sae_fpath)
-
-            # single model
-            model_dir = f'{ANI_1XNR_MODEL_DIR}/{model_name}/train0/networks'  # noqa: E501
-            model = torchani.neurochem.load_model(consts.species, model_dir)
-
-            # create pipeline for computing energies
-            nnp = torchani.nn.Sequential(aev_computer, model, energy_shifter)
-
-            # get torchani ASE calculator (calculates in Hartrees)
-            return torchani.ase.Calculator(consts.species, nnp)
-
-        elif model_loader == GRAPH_PES_MODEL_LOADER:
-
-            from graph_pes.models import load_model
-            import torch
-
-            model = load_model(f"{MODEL_DIR}/{model_name}.model")
-            model.to(dtype=torch.float64)
-            return model.ase_calculator()
-        else:
-            raise NameError(f"Model loader: {model_loader} is not valid.")
-    
     except Exception as e:
         logger.warning(f"{model_name} was unable to be loaded because of error: \n{e} \n... Returning None for calc instead...")
         return None

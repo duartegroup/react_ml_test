@@ -110,6 +110,7 @@ def resolve_test_set_comparison_yaml(input_yaml_fpath: str, parser=None):
         "num_base_models": input_config.get("num_base_models", None),
         "num_base_model_comps": input_config.get("num_base_model_comps", None),
         "alpha_list": input_config.get("alpha_list", None),
+        "cuda_device": str(input_config.get("cuda_device", "cuda:0")),
     }
 
 
@@ -219,6 +220,7 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
         "cust_legend_labels": cust_legend_labels,
         "cust_legend_linestyles": cust_legend_linestyles,
         "ref_point_labels": ref_point_labels,
+        "cuda_device": str(input_config.get("cuda_device", "cuda:0")),
     }
 
 
@@ -440,6 +442,7 @@ def resolve_pretrain_bias_analysis_yaml(input_yaml_fpath: str, parser=None):
         "scatter_mag_ylim": scatter_mag_ylim,
         "mag_log_y": mag_log_y,
         "mag_remove_negs": mag_remove_negs,
+        "cuda_device": str(input_config.get("cuda_device", "cuda:0")),
     }
 
 
