@@ -5,7 +5,7 @@ import ase
 from typing import Dict, List, Literal, Tuple
 from react_ml_test_public.helpers.descriptors import get_soap_descriptors
 from react_ml_test_public.helpers.dim_red import calc_best_similarities, run_pca
-from react_ml_test_public.helpers.io import get_ase_atoms_energy
+from react_ml_test_public.helpers.io import get_ase_atoms_energy, get_ase_atoms_forces
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.utils import get_ase_props, atoms_hash
 import numpy as np
@@ -68,10 +68,44 @@ def sort_configs_by_energy(configs: List[ase.Atoms],
     return sorted(configs, key=lambda config: abs(get_ase_atoms_energy(config) - atom_num_group_mins[len(config)]), reverse=reverse)
 
 
-def sort_configs_by_forces(configs: List[ase.Atoms]):
+def sort_configs_by_forces(configs: list[ase.Atoms],
+                           reverse: bool = False) -> list[ase.Atoms]:
+    """
+    Return a sorted copy of a dataset, sorted by the sum of the atomic force-vector norms.
+
+    Forces must be specified for every config, either as a calculator result or as the 'forces' /
+    'QM_forces' / 'REF_forces' arrays of an extxyz file (see get_ase_atoms_forces); a RuntimeError
+    is raised if any config has none. Sorted low to high by default (good for detecting
+    equilibrium structures in a dataset).
+
+    Parameters:
+        configs: List[ase.Atoms] the list of configurations to sort by their summed atomic force norm
+        reverse: bool sort from highest to lowest summed force norm instead
+    Return:
+        List[ase.Atoms]: a copied, sorted list of the input configs
+    """
+
+    # check forces are specified up front, so a config missing them is reported clearly rather
+    # than failing part-way through the sort
+    config_force_norms = []
+    for i, config in enumerate(configs):
+
+        try:
+            forces = np.asarray(get_ase_atoms_forces(config))
+        except RuntimeError as e:
+            raise RuntimeError(f"Forces are not specified for config {i} of {len(configs)}, and "
+                               f"sort_configs_by_forces sorts by the atomic force norms...") from e
+
+        # summed 3D norm of each atomic force vector
+        config_force_norms.append(float(np.linalg.norm(forces, axis=1).sum()))
+
+    sorted_indices = sorted(range(len(configs)), key=lambda i: config_force_norms[i], reverse=reverse)
+    return [configs[i] for i in sorted_indices]
+
+
+def multi_sort(configs: List[ase.Atoms]):
 
     return
-
 
 def sort_configs_by_soap_desc(configs: List[ase.Atoms],
                               ref_configs: List[ase.Atoms],
@@ -136,13 +170,6 @@ def sort_configs_by_structure(configs: List[ase.Atoms]):
     should be returned in the exact same order.
     """
     return sorted(configs, key=atoms_hash)
-
-
-def sort_dataset_by_uncertainty(configs: List[ase.Atoms], metric: Literal['LPR']):
-    """
-    """
-
-    return
 
 
 def sort_dataset_by_size(configs: List[ase.Atoms], reverse=False):
