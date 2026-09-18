@@ -1,44 +1,10 @@
 import argparse
-import csv
-import glob
-import os
-import re
 
-import numpy as np
 import torch
-from matplotlib import pyplot as plt
 
 from react_ml_test_public.helpers import inputs as rmlt_inputs
-from react_ml_test_public.helpers.io import (
-    flexible_ase_read,
-    get_name_from_path,
-    resolve_cuda_device,
-)
-from react_ml_test_public.helpers.logging import logger
-from react_ml_test_public.helpers.model_eval import get_test_and_pred_data
-from react_ml_test_public.helpers.plot import index_plot
-from react_ml_test_public.helpers.settings import (
-    ANTHRACENE_DA_DATA_DIR,
-    CPD_MVK_DA_DATA_DIR,
-    CSV_DIR,
-    DATASETS_DIR,
-    GUAJADIAL_DA_DATA_DIR,
-    KCAL_PER_MOL,
-    KJ_PER_MOL,
-    MEV,
-    MEV_PER_ATOM,
-    MODEL_DIR,
-    MODELS,
-    PAPER_MODEL_COLOURS,
-    PAPER_MODELS,
-    PLOT_DIR,
-    PlotSettings,
-)
-from react_ml_test_public.helpers.stats import calculate_rmse_on_errors
-from react_ml_test_public.helpers.utils import (
-    get_formatted_model_name,
-    natural_sort_key,
-)
+from react_ml_test_public.helpers.io import resolve_cuda_device
+from react_ml_test_public.helpers.model_eval import reaction_barrier_comparison
 
 if __name__ == "__main__":
 
@@ -113,13 +79,6 @@ if __name__ == "__main__":
     resolved = rmlt_inputs.resolve_reaction_barrier_comparison_yaml(args.input_yaml, parser)
 
     # ===== model / fine-tuning selection =====
-    n = resolved["n"]
-    train_name = resolved["train_name"]
-    sample_str = resolved["sample_str"]
-    energy_str = resolved["energy_str"]
-    rep_num = resolved["rep_num"]
-    omol_rep_num = resolved["omol_rep_num"]
-    omol_energy_str = resolved["omol_energy_str"]
     model_names = resolved["model_names"]
     save_name = resolved["save_name"]
     run_names = resolved["run_names"]
@@ -154,180 +113,30 @@ if __name__ == "__main__":
     if cuda_device != "cpu":
         torch.set_default_dtype(torch.float32)
 
-    for run_name in run_names:
-
-        if run_name != '':
-            if run_type == 'fine_tuned':
-                base_model_name = model_names[0]
-                save_name = f"{base_model_name}_{run_name}_fine_tuned"
-                model_name_stub = f"{model_names[0]}_{run_name}_*_config_fine_tuned*"
-                model_fpaths = sorted(glob.glob(os.path.join(MODEL_DIR, model_name_stub)), key=natural_sort_key)
-                assert len(model_fpaths) > 0, f"No files detected in directory {MODEL_DIR} with name stub {model_name_stub}..."
-                model_names = [base_model_name] + [get_name_from_path(model_fpath) for model_fpath in model_fpaths]
-
-            elif run_type == 'from_scratch': 
-                save_name = f"{from_scratch_name}_from_scratch_{run_name}"
-                model_name_stub = f"{from_scratch_name}_from_scratch_{run_name}_*_config*"
-                model_fpaths = sorted(glob.glob(os.path.join(MODEL_DIR, model_name_stub)), key=natural_sort_key)
-                assert len(model_fpaths) > 0, f"No files detected in directory {MODEL_DIR} with name stub {model_name_stub}..."
-                model_names = [get_name_from_path(model_fpath) for model_fpath in model_fpaths]
-
-        print("Testing models: ", model_names)
-
-        # ===== derived plot lists =====
-        labels = [get_formatted_model_name(model_name) for model_name in model_names]
-        custom_linestyle_list = linestyle_list * num_base_models
-        custom_alpha_list = alpha_list * num_base_models
-        custom_zorder_list = [len(model_names) + 2 - i for i in range(len(model_names))]
-        colours = [x for colour in PAPER_MODEL_COLOURS.values() for x in [colour] * num_base_model_comps]
-
-        # run comparison
-        # get test set ground truth  and forces
-        test_set_name = get_name_from_path(test_trj_fpath)
-
-        # load energies / forces
-        # npz_fpath = f"{}"
-        # cache_data = load_data_cache(npz_fpath)
-        # assert cache_data is not None, f'{npz_fpath} not found...'
-        # test_energies, config_lens = cache_data['mace_desc'], cache_data['config_lens']
-        all_test_energies, all_test_forces, all_pred_energies_dict, all_pred_forces_dict = get_test_and_pred_data(model_names,
-                                                                                                                [test_trj_fpath],
-                                                                                                                include_forces=include_forces,
-                                                                                                                apply_energy_offsets=True,  # True
-                                                                                                                custom_xyz_parsers=[custom_xyz_parser],
-                                                                                                                energy_units=energy_units,
-                                                                                                                force_units=force_units,
-                                                                                                                cuda_device=cuda_device)
-                                                                                                                
-        combined_datasets = all_test_energies
-        combined_datasets.extend([pred_energies 
-                                for model_pred_energies in all_pred_energies_dict.values() 
-                                for pred_energies in model_pred_energies])
-        formatted_model_names = [get_formatted_model_name(model_name) for model_name in model_names]
-        dataset_names = ["Reference"] + formatted_model_names
-        logger.info(f"Dataset Names: {dataset_names}")
-
-        energy_errors = [np.abs(combined_datasets[0] - pred_energies) for pred_energies in combined_datasets[1:]]
-        # energy_errors = [energy_errors[i] for i in indices_filter] if indices_filter is not None else energy_errors # TODO: apply index filter!!!
-
-        for i, model_name in enumerate(formatted_model_names):
-            energy_rmse = calculate_rmse_on_errors(energy_errors[i])
-            logger.info(f'{model_name} Absolute Energy RMSE: {energy_rmse}')
-
-        # plot index plot of absolute energy errors
-        # save_fp = f"{PLOT_DIR}/index/{save_name}_{test_set_names[i]}_energy_errors.png"
-        plot_settings = PlotSettings(x_label='Index', y_label=f"Energy RMSE ({energy_units})", custom_colour_list=colours, 
-                                    show_legend=False,
-                                    custom_alpha_list=custom_alpha_list,
-                                    custom_linestyle_list=custom_linestyle_list)
-        save_fp = f"{PLOT_DIR}/irc/{test_set_name}_{save_name}_energy_errors.png"
-        index_plot(energy_errors,                   formatted_model_names,
-                   save_fp,
-                   plot_as_lines=[i for i in range(len(formatted_model_names))],  # or, only 0
-                   plot_settings=plot_settings
-                  )
-        logger.info(f"Saved energy error index plot to {save_fp}...")
-
-        # set all energies relative to reference config
-        for dataset in combined_datasets:
-            dataset -= dataset[0]  # all reference themselves
-            # dataset -= combined_datasets[0][0]    # reference difference to ground truth
-
-        # get key reference values
-        ref_peak_energy = np.max(combined_datasets[0])
-        ref_peak_pos = np.argmax(combined_datasets[0])
-        ref_prod_energy = combined_datasets[0][ref_prod_index]
-
-        # produce plot of step vs. energy
-        save_fp = f"{PLOT_DIR}/irc/{test_set_name}_{save_name}_reaction_plot.png"
-        step_plot_settings = PlotSettings(x_label=xlabel, 
-                                    y_label=f"Potential Energy ({energy_units})",
-                                    reference_indices=[0], 
-                                    ylim=energies_ylim, 
-                                    grid_lines=grid_lines, 
-                                    show_legend=show_legend,
-                                    cust_legend_colours=cust_legend_colours,
-                                    cust_legend_labels=cust_legend_labels,
-                                    cust_legend_linestyles=cust_legend_linestyles,
-                                    custom_alpha_list=custom_alpha_list,
-                                    custom_zorder_list=custom_zorder_list,
-                                    legend_fontsize=8,
-                                    custom_colour_list=colours,
-                                    custom_linestyle_list=[(0, (1, 1))] + custom_linestyle_list,
-                                    line_width=2.0,
-                                    )
-
-        index_plot(combined_datasets,
-                dataset_names,
-                save_fp,
-                plot_as_lines=[i for i in range(len(combined_datasets))],  # or, only 0
-                plot_settings=step_plot_settings,
-                ref_points=[(0, 0.0), (ref_peak_pos, ref_peak_energy), (len(combined_datasets[0]) + ref_prod_index, ref_prod_energy)],
-                ref_point_labels=ref_point_labels,
-                ref_label_offsets=[5.0, -10.0, 20.0]
-                )
-        logger.info(f"Saved reaction plot to {save_fp}...")
-
-        # if forces are included
-        model_force_norm_errors = []
-        if include_forces:
-            configs = flexible_ase_read(test_trj_fpath, custom_xyz_parser)
-            test_force_norms = np.linalg.norm(all_test_forces[0], axis=1)
-            for model_name in model_names:
-                pred_force_norms = np.linalg.norm(all_pred_forces_dict[model_name][0], axis=1)
-                force_norm_errors = np.abs(test_force_norms - pred_force_norms)
-
-                # average over configs
-                config_ave_force_norm_errors = []
-                start = 0
-                for config in configs:
-                    config_force_errors = np.array(force_norm_errors[start: start + len(config)])
-                    config_mean_force_error = np.mean(config_force_errors)
-                    config_ave_force_norm_errors.append(config_mean_force_error)
-                    start += len(config)
-                model_force_norm_errors.append(np.array(config_ave_force_norm_errors))
-
-            # index plot of force errors
-            save_fp = f"{PLOT_DIR}/irc/{test_set_name}_{save_name}_force_errors.png"
-            plot_settings = plot_settings._replace(y_label=f"|DFT - Pred Force Norm| ({force_units})", 
-                                                custom_linestyle_list=custom_linestyle_list, ylim=forces_ylim)
-            index_plot(model_force_norm_errors,
-                    formatted_model_names,
-                    save_fp,
-                    plot_as_lines=[i for i in range(len(model_force_norm_errors))],  # or, only 0
-                    plot_settings=plot_settings
-                    )
-            # indices = np.arange(0, len(model_force_norm_errors[0]))
-            # for model_name in formatted_model_names:
-            #     plt.plot(indices, dataset, label=model_name, linestyle=line_style, c=colour, zorder=z_order, linewidth=plot_settings.line_width)
-            logger.info(f"Saved force error index plot to {save_fp}...")
-
-        csv_tuples = []
-        for i, model_name in enumerate(model_names):
-            pred_energies = all_pred_energies_dict[model_name][0]
-            reactant_energy = pred_energies[0]
-            # print(pred_energies)
-            peak_energy = np.max(pred_energies)
-            peak_pos = np.argmax(pred_energies)
-
-            abs_peak_energy_error = peak_energy - ref_peak_energy 
-            ref_peak_energy_error = peak_energy - ref_peak_energy 
-            ref_peak_force_error = model_force_norm_errors[i][peak_pos] if include_forces else 'N/A'
-            ref_peak_pos_error = peak_pos - ref_peak_pos
-            product_energy = pred_energies[ref_prod_index]
-            csv_tuples.append((model_name, reactant_energy, product_energy, peak_energy, peak_pos, ref_prod_energy, ref_peak_energy, ref_peak_pos, ref_peak_energy_error, ref_peak_force_error, ref_peak_pos_error))
-
-        # save csv 
-        csv_save_fp = f"{CSV_DIR}/{test_set_name}_{save_name}.csv"
-        with open(csv_save_fp, mode='w', newline='') as csv_file:
-            writer = csv.writer(csv_file)
-            header_row = ['Model', f'Reactant Energy {energy_units}', f'Product Energy {energy_units}', f'Peak Energy {energy_units}', 'Peak Position (Step)',
-                            f'Ref Prod Energy {energy_units}', f'Ref Peak Energy {energy_units}', 'Ref Peak Position', 
-                            f'Ref Peak Energy Error {energy_units}', f'Ref Peak Force Error {energy_units}', 'Ref Peak Position Error (Step)']
-            writer.writerow(header_row)
-            print(header_row)
-            writer.writerows(csv_tuples)
-            for csv_tuple in csv_tuples:
-                print(csv_tuple)
-
-        logger.info(f"Saved csv to: {csv_save_fp}...")
+    # run the comparison (see helpers/model_eval.py): writes the energy-error /
+    # reaction-profile / force-error plots and the per-model CSV
+    reaction_barrier_comparison(model_names,
+                                test_trj_fpath,
+                                run_names=run_names,
+                                save_name=save_name,
+                                run_type=run_type,
+                                from_scratch_name=from_scratch_name,
+                                num_base_models=num_base_models,
+                                num_base_model_comps=num_base_model_comps,
+                                alpha_list=alpha_list,
+                                linestyle_list=linestyle_list,
+                                include_forces=include_forces,
+                                ref_prod_index=ref_prod_index,
+                                custom_xyz_parser=custom_xyz_parser,
+                                xlabel=xlabel,
+                                energy_units=energy_units,
+                                force_units=force_units,
+                                energies_ylim=energies_ylim,
+                                forces_ylim=forces_ylim,
+                                grid_lines=grid_lines,
+                                show_legend=show_legend,
+                                cust_legend_colours=cust_legend_colours,
+                                cust_legend_labels=cust_legend_labels,
+                                cust_legend_linestyles=cust_legend_linestyles,
+                                ref_point_labels=ref_point_labels,
+                                cuda_device=cuda_device)
