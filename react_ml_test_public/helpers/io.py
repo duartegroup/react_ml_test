@@ -15,6 +15,7 @@ from react_ml_test_public.helpers.settings import (
     ANI_MODEL_LOADER,
     ANI_MODELS,
     GRAPH_PES_MODEL_LOADER,
+    HARTREE_TO_EV,
     MACE_MODEL_LOADER,
     MACE_MODELS,
     MODEL_DIR,
@@ -185,6 +186,19 @@ def autode_props_parser(prop_line: str) -> dict:
         raise ValueError("No E = <float> found in Props Line for autoDE xyz props parser...")
 
 
+def hartree_props_parser(prop_line: str) -> dict:
+    """
+    Props parser for extxyz files labelled with ``REF_energy=<float>`` in Hartree, e.g. the
+    reaction-profile files written with ``energy_units="Hartree"``. The energy is converted to eV
+    (HARTREE_TO_EV) so it is on the same footing as the MLIP predictions.
+    """
+    match = re.search(r"REF_energy\s*=\s*(-?\d+\.\d+)", prop_line)
+    if match:
+        return {"energy": float(match.group(1)) * HARTREE_TO_EV}
+    else:
+        raise ValueError("No REF_energy = <float> found in Props Line for Hartree xyz props parser...")
+
+
 def get_name_from_path(fpath: str):
     """
     Get the name of a file (i.e. dataset / model) from a path string.
@@ -228,14 +242,17 @@ def load_data_cache(cache_path: str):
     return data
 
 
-def save_npz_data_cache(npz_cache_path: str, 
-                        array_dict: Dict[str, np.ndarray], 
+def save_npz_data_cache(npz_cache_path: str,
+                        array_dict: Dict[str, np.ndarray],
                         meta: Dict = None):
     """
-    Saves numpy arrays and pickled metadata as a .npz file.    
+    Saves numpy arrays and pickled metadata as a .npz file.
     """
 
     # np.savez(npz_cache_path, **array_dict, meta=np.array(meta, dtype=object))
+    npz_cache_dir = os.path.dirname(npz_cache_path)
+    if npz_cache_dir:
+        os.makedirs(npz_cache_dir, exist_ok=True)
     np.savez(npz_cache_path, **array_dict)
     logger.info(f"Saved npz data cache to {npz_cache_path}...")
 

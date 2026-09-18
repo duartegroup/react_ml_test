@@ -262,15 +262,17 @@ def reaction_barrier_comparison(model_names: List[str],
                                 cust_legend_labels: List[str] = None,
                                 cust_legend_linestyles: List[str] = None,
                                 ref_point_labels: List[str] = None,
-                                cuda_device: str = "cuda:0"):
+                                cuda_device: str = "cuda:0",
+                                plot_dir: str = None,
+                                csv_dir: str = None):
     """
     Compare a selection of MLIP models along an IRC trajectory, and write the resulting
     energy-error / reaction-profile / force-error plots and per-model CSV to disk.
 
     For each name in ``run_names`` the models are either taken from ``model_names`` as listed
     (the unnamed ``['']`` run) or discovered in ``MODEL_DIR`` by glob, as selected by
-    ``run_type``. Everything is saved under ``PLOT_DIR/irc`` and ``CSV_DIR``, named after the
-    trajectory and the run's ``save_name``.
+    ``run_type``. Everything is saved under ``plot_dir/irc`` and ``csv_dir``, named after the
+    trajectory and the run's ``save_name``; both default to ``PLOT_DIR`` / ``CSV_DIR``.
 
     ``cuda_device`` is expected to be already resolved (see ``resolve_cuda_device``), as the
     calculators fall back to 'cpu' internally anyway.
@@ -309,13 +311,19 @@ def reaction_barrier_comparison(model_names: List[str],
     :param cust_legend_linestyles: legend line styles for the reference (DFT) line
     :param ref_point_labels: labels for the RS / TS / PS reference points (or None)
     :param cuda_device: device for the MLIP calculators
-    :return: None. The plots are written to PLOT_DIR/irc and the CSV to CSV_DIR.
+    :param plot_dir: directory to write the plots to (default PLOT_DIR)
+    :param csv_dir: directory to write the CSV to (default CSV_DIR)
+    :return: None. The plots are written to plot_dir/irc and the CSV to csv_dir.
     """
 
     # defaults duplicated from the input-YAML resolver, so the helper also works standalone
     run_names = run_names if run_names else ['']
     alpha_list = alpha_list if alpha_list is not None else [1.0]
     linestyle_list = linestyle_list if linestyle_list is not None else ["-"]
+    plot_dir = PLOT_DIR if plot_dir is None else plot_dir
+    csv_dir = CSV_DIR if csv_dir is None else csv_dir
+    os.makedirs(f"{plot_dir}/irc", exist_ok=True)
+    os.makedirs(csv_dir, exist_ok=True)
 
     for run_name in run_names:
 
@@ -375,7 +383,7 @@ def reaction_barrier_comparison(model_names: List[str],
                                     show_legend=False,
                                     custom_alpha_list=custom_alpha_list,
                                     custom_linestyle_list=custom_linestyle_list)
-        save_fp = f"{PLOT_DIR}/irc/{test_set_name}_{save_name}_energy_errors.png"
+        save_fp = f"{plot_dir}/irc/{test_set_name}_{save_name}_energy_errors.png"
         index_plot(energy_errors,                   formatted_model_names,
                    save_fp,
                    plot_as_lines=[i for i in range(len(formatted_model_names))],  # or, only 0
@@ -393,7 +401,7 @@ def reaction_barrier_comparison(model_names: List[str],
         ref_prod_energy = combined_datasets[0][ref_prod_index]
 
         # produce plot of step vs. energy
-        save_fp = f"{PLOT_DIR}/irc/{test_set_name}_{save_name}_reaction_plot.png"
+        save_fp = f"{plot_dir}/irc/{test_set_name}_{save_name}_reaction_plot.png"
         step_plot_settings = PlotSettings(x_label=xlabel,
                                     y_label=f"Potential Energy ({energy_units})",
                                     reference_indices=[0],
@@ -442,7 +450,7 @@ def reaction_barrier_comparison(model_names: List[str],
                 model_force_norm_errors.append(np.array(config_ave_force_norm_errors))
 
             # index plot of force errors
-            save_fp = f"{PLOT_DIR}/irc/{test_set_name}_{save_name}_force_errors.png"
+            save_fp = f"{plot_dir}/irc/{test_set_name}_{save_name}_force_errors.png"
             plot_settings = plot_settings._replace(y_label=f"|DFT - Pred Force Norm| ({force_units})",
                                                 custom_linestyle_list=custom_linestyle_list, ylim=forces_ylim)
             index_plot(model_force_norm_errors,
@@ -467,7 +475,7 @@ def reaction_barrier_comparison(model_names: List[str],
             csv_tuples.append((model_name, reactant_energy, product_energy, peak_energy, peak_pos, ref_prod_energy, ref_peak_energy, ref_peak_pos, ref_peak_energy_error, ref_peak_force_error, ref_peak_pos_error))
 
         # save csv
-        csv_save_fp = f"{CSV_DIR}/{test_set_name}_{save_name}.csv"
+        csv_save_fp = f"{csv_dir}/{test_set_name}_{save_name}.csv"
         with open(csv_save_fp, mode='w', newline='') as csv_file:
             writer = csv.writer(csv_file)
             header_row = ['Model', f'Reactant Energy {energy_units}', f'Product Energy {energy_units}', f'Peak Energy {energy_units}', 'Peak Position (Step)',

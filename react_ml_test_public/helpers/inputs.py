@@ -28,17 +28,22 @@ import yaml
 from react_ml_test_public.helpers.io import (
     autode_props_parser,
     flexible_ase_read,
+    hartree_props_parser,
     orca_props_parser,
     substitute_yaml_variables,
 )
 from react_ml_test_public.helpers.settings import (
+    DATA_DIR,
     KCAL_PER_MOL,
     KJ_PER_MOL,
     MEV,
     MEV_PER_ATOM,
     OPT_DIR,
+    OUT_DIR,
     PAPER_MODEL_COLOURS,
     TRAJ_DIR,
+    resolve_data_path,
+    resolve_out_dirs,
 )
 
 
@@ -118,8 +123,20 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
     """Load + process the input YAML for run_reaction_barrier_comparison.py.
 
     Returns a flat dict of the config variables that script's ``__main__`` declares.
+
+    Data / output directories may be set per-YAML with the optional ``data_dir`` and ``out_dir``
+    fields, which default to ``DATA_DIR`` / ``OUT_DIR`` from settings.py. A relative
+    ``test_trj_fpath`` that does not resolve from the current working directory is taken to be
+    relative to ``data_dir``, and plots / CSVs are written under ``out_dir`` (see
+    ``resolve_out_dirs``).
     """
     input_config = _load_yaml_config(input_yaml_fpath, parser)
+
+    # ===== data / output directories =====
+    # defaults come from settings.py, so a YAML only needs to set these when it should read /
+    # write somewhere other than the DATA_DIR / OUT_DIR the run was started from
+    data_dir = input_config.get("data_dir", DATA_DIR)
+    out_dir, plot_dir, csv_dir = resolve_out_dirs(input_config.get("out_dir", OUT_DIR))
 
     # ===== model / fine-tuning selection =====
     n = input_config.get("n", None)
@@ -151,7 +168,7 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
     from_scratch_name = input_config.get("from_scratch_name", None)
 
     # ===== IRC trajectory comparison =====
-    test_trj_fpath = input_config.get("test_trj_fpath", None)
+    test_trj_fpath = resolve_data_path(input_config.get("test_trj_fpath", None), data_dir)
     if test_trj_fpath is None:
         _error(parser, "test_trj_fpath must be set in the input YAML "
                        "(path to the IRC trajectory .xyz to compare against).")
@@ -174,6 +191,7 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
     _xyz_parsers = {
         "orca_props_parser": orca_props_parser,
         "autode_props_parser": autode_props_parser,
+        "hartree_props_parser": hartree_props_parser,
     }
     if isinstance(custom_xyz_parser_name, str):
         custom_xyz_parser = _xyz_parsers.get(custom_xyz_parser_name, None)
@@ -212,6 +230,10 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
         "num_base_model_comps": num_base_model_comps,
         "alpha_list": alpha_list,
         "linestyle_list": linestyle_list,
+        "data_dir": data_dir,
+        "out_dir": out_dir,
+        "plot_dir": plot_dir,
+        "csv_dir": csv_dir,
         "test_trj_fpath": test_trj_fpath,
         "custom_xyz_parser": custom_xyz_parser,
         "include_forces": include_forces,

@@ -4,6 +4,7 @@ import torch
 
 from react_ml_test_public.helpers import inputs as rmlt_inputs
 from react_ml_test_public.helpers.io import resolve_cuda_device
+from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.model_eval import reaction_barrier_comparison
 
 if __name__ == "__main__":
@@ -20,6 +21,10 @@ if __name__ == "__main__":
     Input YAML format (see inputs/IRC/guajadial_DA_IRC_barrier.yaml for a full example):
 
     Fields:
+        data_dir:               # data root directory for relative test_trj_fpath paths
+                                # (default DATA_DIR from settings.py).
+        out_dir:                # output root directory, i.e. plots go to <out_dir>/plt and
+                                # CSVs to <out_dir>/csv (default OUT_DIR from settings.py).
         n:                      # training set size.
         train_name:             # fine-tuning training set name.
         sample_str:             # sampling-strategy suffix used in fine-tuned names (e.g. "ts_gauss_").
@@ -40,8 +45,10 @@ if __name__ == "__main__":
         alpha_list:             # alpha values used for plotting.
         linestyle_list:         # line style per base-model comparison.
 
-        test_trj_fpath:         # path to the IRC trajectory .xyz to compare against.
-        custom_xyz_parser:      # "orca_props_parser" / "autode_props_parser" / empty.
+        test_trj_fpath:         # path to the IRC trajectory .xyz to compare against, taken to be
+                                # relative to data_dir when it does not resolve from the cwd.
+        custom_xyz_parser:      # "orca_props_parser" / "autode_props_parser" /
+                                # "hartree_props_parser" (REF_energy=<float> in Hartree) / empty.
         include_forces:         # whether to also compare force norms.
         ref_prod_index:         # index of the product reference config (e.g. -1).
         xlabel:                 # x-axis label, e.g. "IRC Image".
@@ -88,6 +95,13 @@ if __name__ == "__main__":
     num_base_model_comps = resolved["num_base_model_comps"]
     alpha_list = resolved["alpha_list"]
     linestyle_list = resolved["linestyle_list"]
+
+    # ===== data / output directories =====
+    data_dir = resolved["data_dir"]
+    out_dir = resolved["out_dir"]
+    plot_dir = resolved["plot_dir"]
+    csv_dir = resolved["csv_dir"]
+    logger.info(f"Using data dir: {data_dir}, out dir: {out_dir} (plots: {plot_dir}, csv: {csv_dir})...")
 
     # ===== IRC trajectory comparison =====
     test_trj_fpath = resolved["test_trj_fpath"]
@@ -139,4 +153,6 @@ if __name__ == "__main__":
                                 cust_legend_labels=cust_legend_labels,
                                 cust_legend_linestyles=cust_legend_linestyles,
                                 ref_point_labels=ref_point_labels,
-                                cuda_device=cuda_device)
+                                cuda_device=cuda_device,
+                                plot_dir=plot_dir,
+                                csv_dir=csv_dir)
