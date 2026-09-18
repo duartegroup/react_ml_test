@@ -63,7 +63,12 @@ if __name__ == "__main__":
         omol_energy_str:        # OMOL energy suffix/prefix string.
         model_names:            # list of model names to compare (supports ${var} templating).
         save_name:              # output name.
-        run_names:              # run names to process (defaults to [save_name]).
+        run_names:              # multiple run names to detect and process (defaults to [''],
+                                # i.e. a single unnamed run using model_names as listed).
+        run_type:               # "fine_tuned" / "from_scratch": how a named run's models
+                                # are discovered by glob (defaults to None = no discovery).
+        from_scratch_name:      # base model name used in from-scratch model names
+                                # (only needed when run_type is "from_scratch").
         num_base_models:        # number of base models.
         num_base_model_comps:   # number of comparisons per base model.
         alpha_list:             # alpha values used for plotting.
@@ -87,7 +92,7 @@ if __name__ == "__main__":
         cuda_device:            # GPU device for the MLIP calculators (default "cuda:0",
                                 # falls back to "cpu" if that device is not found).
 
-    Any omitted field is set to None.
+    Any omitted field is set to None, except run_names, which defaults to [''].
     """
 
 
@@ -118,6 +123,8 @@ if __name__ == "__main__":
     model_names = resolved["model_names"]
     save_name = resolved["save_name"]
     run_names = resolved["run_names"]
+    run_type = resolved["run_type"]
+    from_scratch_name = resolved["from_scratch_name"]
     num_base_models = resolved["num_base_models"]
     num_base_model_comps = resolved["num_base_model_comps"]
     alpha_list = resolved["alpha_list"]
@@ -147,136 +154,32 @@ if __name__ == "__main__":
     if cuda_device != "cpu":
         torch.set_default_dtype(torch.float32)
 
-    # ===== derived plot lists =====
-    labels = [get_formatted_model_name(model_name) for model_name in model_names]
-    custom_linestyle_list = linestyle_list * num_base_models
-    custom_alpha_list = alpha_list * num_base_models
-    custom_zorder_list = [len(model_names) + 2 - i for i in range(len(model_names))]
-    colours = [x for colour in PAPER_MODEL_COLOURS.values() for x in [colour] * num_base_model_comps]
-
-
-    # ===== 1. SELECT BASE MODEL HERE =====
-
-    # --- full zero-shot model comparison ---
-    # n, ft_system_name, ft_train_name, rep_num = 42, "CPD_MVK_DA", "CPD_MVK_DA_train", 1
-    # # n, ft_system_name, ft_train_name, rep_num = 46, "ant
-    # # hracene_DA", "anthracene_DA_train", 2
-    # # n, ft_system_name, ft_train_name, rep_num = 50, "guajadial_DA", "guajadial_DA_train", 1
-    # model_names = [
-    #         # 'GO-MACE-23', 
-    #         # 'MACE-OFF23_medium', 
-    #         # 'MACE-MP-0b3_medium',
-    #         # 'EGRET_1T', 
-    #         # 'MACE-NEB',
-    #         # 'ani-1xnr',
-    #         # 'MACE-ANI-CC',
-    #         'MACE-omol-0-extra-large-1024',
-    #         # f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_fine_tuned_energy_rep_{rep_num}",
-    #         f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_2",
-    # ]
-    # save_name = "zero_shot_paper_models"
-    # run_names = ['']
-
-    # # just models (no reference)
-    # colours = list(PAPER_MODEL_COLOURS.values())
-    # custom_linestyle_list=['-'] * 3
-    # custom_alpha_list = None
-
-    # fully fine-tuned (positive control) paper models
-    # model_names = [
-    #               "GO-MACE-23_CPD_MVK_DA_final_train_clean_vac_solv_only_force_filtered_fine_tuned_rep_1",
-    #               "MACE-OFF23_medium_CPD_MVK_DA_final_train_clean_vac_solv_only_force_filtered_fine_tuned_rep_1",
-    #               "MACE-MP0-128-L1_CPD_MVK_DA_final_train_clean_vac_solv_only_force_filtered_fine_tuned_rep_1",
-    #               ]
-    # save_name = "paper_positive_control_ft_models"
-    # labels = [f'{get_formatted_model_name(model_name)} Full FT' for model_name in PAPER_MODELS]
-    # run_names = ['']
-
-    # --- specific fine-tuned model comparison ---
-    # n, ft_system_name, ft_train_name, sample_str, rep_num, omol_rep_num, omol_energy_str = 42, "CPD_MVK_DA", "CPD_MVK_DA_train", 'ts_gauss_', 1, 1, 'energy_'
-    # n, ft_system_name, ft_train_name, sample_str, rep_num, omol_rep_num, omol_energy_str = 46, "anthracene_DA", "anthracene_DA_train", '', 2, 3, 'energy_'
-
-    # regular fine-tuned models
-    # energy_str = ''
-    # energy_str = 'energy_'
-                # f"GO-MACE-23_{ft_train_name}_{n}_config_strat_fine_tuned_rep_{rep_num}",
-                # f"anthracene_DA_GO46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_rep_{rep_num}",
-                # f"anthracene_DA_GO46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_energy_rep_{rep_num}",
-                # f"GO-MACE-23_{ft_train_name}_fine_tuned_energy_rep_1",
-                # f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_fine_tuned_rep_{rep_num}", 
-                # f"MACE-OFF23_medium_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_{rep_num}",
-                # f"anthracene_DA_OFF46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_rep_{rep_num}",
-                # f"anthracene_DA_OFF46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_energy_rep_{rep_num}",
-                # f"MACE-OFF23_medium_{ft_train_name}_fine_tuned_energy_rep_1",
-                # f"MACE-MP-0b3_medium_{ft_train_name}_{n}_config_strat_fine_tuned_rep_{rep_num}",
-                # f"anthracene_DA_MP46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_rep_{rep_num}",
-                # f"anthracene_DA_MP46_{ft_train_name}_{n}_config_strat_w_1_4_vac_sample_fine_tuned_energy_rep_{rep_num}",
-                # f"MACE-MP-0b3_medium_{ft_train_name}_fine_tuned_energy_rep_1",
-                # f"MACE-omol-0-extra-large-1024_{ft_train_name}_{n}_config_strat_ts_gauss_fine_tuned_energy_rep_{rep_num}"
-
-    # save_name = f"paper_ft_models_n={n}_w_extra_sample"
-
-    # just models (no reference)
-    # colours = list(PAPER_MODEL_COLOURS.values())
-    # custom_linestyle_list=['-'] * 3
-    # custom_alpha_list = None
-
-    # paper models with a reference each
-    # num_base_model_comps, alpha_list = 3, [0.2, 0.6, 0.9]  # 2 by default
-    # num_base_model_comps, alpha_list, linestyle_list = 1, [0.9], ['-', '-']  # 2 by default
-
-
-    # ===== 3. SPECIFY TRAJECTORY FOR COMPARISON HERE =====
-
-    # --- CPD MVK irc in vac (wB97M) ---
-    # test_trj_fpath = f"{CPD_MVK_DA_DATA_DIR}/valid/CPD_MVK_wB97M_IRC.xyz"
-    # custom_xyz_parser = orca_props_parser
-    # include_forces = False
-    # ref_prod_index = -1
-    # xlabel = 'IRC Image'
-    # energies_ylim=(-30.0, 50.0)
-    # forces_ylim=(0.0, 700.0)
-
-    # --- anthracene IRC ---
-    # # test_trj_fpath, energies_ylim = f"{ANTHRACENE_DA_DATA_DIR}/valid/anthracene_DA_wB97M_IRC.xyz", (-30.0, 35.0)
-    # test_trj_fpath, energies_ylim = f"{ANTHRACENE_DA_DATA_DIR}/valid/anthracene_1_4_DA_wB97M_IRC.xyz", (-30.0, 35.0)
-    # custom_xyz_parser = orca_props_parser
-    # include_forces = False
-    # ref_prod_index = -1
-    # xlabel = 'IRC Image'
-
-    # --- guajadial IRC ---
-    # test_trj_fpath, energies_ylim  = f"{GUAJADIAL_DA_DATA_DIR}/valid/guajadial_wB97M_IRC_trunc.xyz", (-45.0, 45.0)
-
-    # === UNITS ===
-    # energy_units = MEV
-    # energy_units = KJ_PER_MOL
-    # energy_units = MEV_PER_ATOM
-
-    # === PLOT SETTINGS ===
-    # ref_point_labels =['RS', 'TS', 'PS']
-
-
-    # Choose Test System
-
     for run_name in run_names:
 
-        # === 2a. FINE-TUNING RUNS ===
-        # base_model_name = model_names[0]
-        # save_name = f"{base_model_name}_{run_name}_fine_tuned"
-        # model_name_stub = f"{model_names[0]}_{run_name}_*_config_fine_tuned*"
-        # model_fpaths = sorted(glob.glob(os.path.join(MODEL_DIR, model_name_stub)), key=natural_sort_key)
-        # assert len(model_fpaths) > 0, f"No files detected in directory {MODEL_DIR} with name stub {model_name_stub}..."
-        # model_names = [base_model_name] + [get_name_from_path(model_fpath) for model_fpath in model_fpaths]
+        if run_name != '':
+            if run_type == 'fine_tuned':
+                base_model_name = model_names[0]
+                save_name = f"{base_model_name}_{run_name}_fine_tuned"
+                model_name_stub = f"{model_names[0]}_{run_name}_*_config_fine_tuned*"
+                model_fpaths = sorted(glob.glob(os.path.join(MODEL_DIR, model_name_stub)), key=natural_sort_key)
+                assert len(model_fpaths) > 0, f"No files detected in directory {MODEL_DIR} with name stub {model_name_stub}..."
+                model_names = [base_model_name] + [get_name_from_path(model_fpath) for model_fpath in model_fpaths]
 
-        # === OR 2b. FROM SCRATCH RUNS ===
-        # save_name = f"{from_scratch_name}_from_scratch_{run_name}"
-        # model_name_stub = f"{from_scratch_name}_from_scratch_{run_name}_*_config*"
-        # model_fpaths = sorted(glob.glob(os.path.join(MODEL_DIR, model_name_stub)), key=natural_sort_key)
-        # assert len(model_fpaths) > 0, f"No files detected in directory {MODEL_DIR} with name stub {model_name_stub}..."
-        # model_names += [get_name_from_path(model_fpath) for model_fpath in model_fpaths]
+            elif run_type == 'from_scratch': 
+                save_name = f"{from_scratch_name}_from_scratch_{run_name}"
+                model_name_stub = f"{from_scratch_name}_from_scratch_{run_name}_*_config*"
+                model_fpaths = sorted(glob.glob(os.path.join(MODEL_DIR, model_name_stub)), key=natural_sort_key)
+                assert len(model_fpaths) > 0, f"No files detected in directory {MODEL_DIR} with name stub {model_name_stub}..."
+                model_names = [get_name_from_path(model_fpath) for model_fpath in model_fpaths]
 
         print("Testing models: ", model_names)
+
+        # ===== derived plot lists =====
+        labels = [get_formatted_model_name(model_name) for model_name in model_names]
+        custom_linestyle_list = linestyle_list * num_base_models
+        custom_alpha_list = alpha_list * num_base_models
+        custom_zorder_list = [len(model_names) + 2 - i for i in range(len(model_names))]
+        colours = [x for colour in PAPER_MODEL_COLOURS.values() for x in [colour] * num_base_model_comps]
 
         # run comparison
         # get test set ground truth  and forces

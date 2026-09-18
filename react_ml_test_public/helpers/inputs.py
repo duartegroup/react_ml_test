@@ -141,9 +141,14 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
         _error(parser, "num_base_models and num_base_model_comps must be set in the input YAML.")
     alpha_list = alpha_list if alpha_list is not None else [1.0]
     linestyle_list = linestyle_list if linestyle_list is not None else ["-"]
+    # run_names defaults to [''] - a single unnamed run, in which case the models are
+    # taken from model_names as listed. A named run instead triggers the discovery of
+    # that run's models by glob, as selected by run_type.
     run_names = input_config.get("run_names", None)
-    if run_names is None:
-        run_names = [save_name] if save_name is not None else []
+    if not run_names:
+        run_names = ['']
+    run_type = input_config.get("run_type", None)
+    from_scratch_name = input_config.get("from_scratch_name", None)
 
     # ===== IRC trajectory comparison =====
     test_trj_fpath = input_config.get("test_trj_fpath", None)
@@ -201,6 +206,8 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
         "model_names": model_names,
         "save_name": save_name,
         "run_names": run_names,
+        "run_type": run_type,
+        "from_scratch_name": from_scratch_name,
         "num_base_models": num_base_models,
         "num_base_model_comps": num_base_model_comps,
         "alpha_list": alpha_list,

@@ -27,7 +27,9 @@ model_names:
 
 save_name: paper_ft_models_n=42
 
-# run_names defaults to [save_name]; list more here to process multiple runs, e.g.
+# run_names defaults to [''] - a single unnamed run, using model_names as listed above.
+# For named runs, list them here and set run_type so that each run's models are
+# discovered by glob, e.g. with run_type: fine_tuned or run_type: from_scratch:
 # run_names:
 #   - ${save_name}
 
