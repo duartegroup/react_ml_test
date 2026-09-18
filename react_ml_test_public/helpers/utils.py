@@ -6,7 +6,7 @@ import hashlib
 import math
 import os
 import re
-from typing import Callable, Dict, List, Literal, TextIO, Union
+from typing import Callable, Dict, List, Literal, Union
 
 import ase
 import numpy as np
@@ -194,7 +194,6 @@ def guess_per_element_mean_energies(
     custom_xyz_parser: Callable = None,
     dtype = np.float64,
     pbc_box: List[str] = None,
-    hdf5_file: TextIO = None
 ) -> dict[int, float]:
     r"""
 
@@ -232,7 +231,7 @@ def guess_per_element_mean_energies(
 
         npz_cache_path = f"{NPZ_DIR}/{calc_name}_{get_name_from_path(configs_fpath)}_energies.npz"        
         # load cached npz file of energies / forces if it exists
-        cache_data = load_data_cache(npz_cache_path, hdf5_file=hdf5_file)
+        cache_data = load_data_cache(npz_cache_path)
         if cache_data is not None:
             energies = cache_data['energies']
         else:

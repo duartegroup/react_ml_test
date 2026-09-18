@@ -13,7 +13,6 @@ from react_ml_test_public.helpers.io import (
     get_ase_atoms_energy,
     get_name_from_path,
     load_data_cache,
-    load_hdf5_cache,
     load_model_calculator,
     save_npz_data_cache,
 )
@@ -348,9 +347,6 @@ if __name__ == "__main__":
     # ================================
 
     input_ds_names = [get_name_from_path(input_ds_fp) for input_ds_fp in input_ds_fps]
-
-    # load cache file
-    hdf5_file = load_hdf5_cache()
 
     # load ts
     ts_ref_bond_distances = {ri: ts_ref_config.get_distance(*ri) for ri in react_coords}

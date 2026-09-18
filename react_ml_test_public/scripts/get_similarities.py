@@ -27,8 +27,6 @@ CUDA_DEVICE = resolve_cuda_device()  # 'cuda:0' by default, falling back to 'cpu
 
 if __name__ == "__main__":
 
-    hdf5_file = None
-    
     # ===== INPUT REFERENCE DESCRIPTORS  =====
     
     # GO-MACE!
@@ -39,8 +37,6 @@ if __name__ == "__main__":
     # MACE-OFF23
     # ref_name = "spice_train"
     # model_name = "MACE-OFF23_medium"
-    # # hdf5_file = load_hdf5_cache(f"{DESCRIPTORS_DIR}/{ref_name}_mace_desc.h5")
-    # # ref_desc_fpaths = [f"{batch_name}.npz"for batch_name in hdf5_file.keys()]
     # ref_name_stub = f"{DESCRIPTORS_DIR}/{ref_name}_batch_*mace_desc.npz"  # MACE-MP0 OHC only train set in batches
     # ref_desc_fpaths = sorted(glob.glob(ref_name_stub), key=natural_sort_key)
     # assert len(ref_desc_fpaths) > 0, f"No files detected with name stub {ref_name_stub}..."
@@ -96,7 +92,7 @@ if __name__ == "__main__":
     for i, ref_desc_fpath in enumerate(ref_desc_fpaths):
 
         # load ref mace descs
-        cache_data = load_data_cache(ref_desc_fpath, hdf5_file=hdf5_file)
+        cache_data = load_data_cache(ref_desc_fpath)
         assert cache_data is not None, f'{ref_desc_fpath} not found...'
         ref_mace_desc, ref_elements, config_lens = cache_data['mace_desc'], cache_data['elements'], cache_data['config_lens']
         if np.issubdtype(ref_elements.dtype, np.bytes_):

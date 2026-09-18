@@ -12,7 +12,6 @@ An ORA repository of trained models, data, and other supplementary results can b
    
    ```bash
    conda activate mlptrain-mace
-   pip install hdf5plugin
    pip install --upgrade mace-torch
    pip install --upgrade ase
    ```

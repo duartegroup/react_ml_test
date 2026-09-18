@@ -14,7 +14,6 @@ from react_ml_test_public.helpers.io import (
     get_ase_atoms_energy,
     get_name_from_path,
     load_data_cache,
-    load_hdf5_cache,
     load_model_calculator,
     save_npz_data_cache,
 )

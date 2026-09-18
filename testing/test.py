@@ -545,8 +545,7 @@ class IOTests(unittest.TestCase):
                                                                        energy_units=energy_units,
                                                                        force_units=force_units,
                                                                        model_loader=model_loader,
-                                                                       enable_cueq=enable_cueq,
-                                                                       hdf5_file=hdf5_file)
+                                                                       enable_cueq=enable_cueq)
 
         # make predictions again (this time it will load from cache)
 

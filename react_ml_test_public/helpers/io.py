@@ -7,12 +7,9 @@ from contextlib import contextmanager
 from typing import Callable, Dict, List, Literal, Union
 import ase
 from ase.io import read
-from typing import TextIO
 from ase.io.extxyz import read_extxyz
 import numpy as np
 import glob
-import h5py
-import hdf5plugin
 from react_ml_test_public.helpers.settings import (
     ANI_1XNR_MODEL_DIR,
     ANI_MODEL_LOADER,
@@ -21,7 +18,6 @@ from react_ml_test_public.helpers.settings import (
     MACE_MODEL_LOADER,
     MACE_MODELS,
     MODEL_DIR,
-    OUT_CACHE_FPATH,
 )
 from react_ml_test_public.helpers.logging import logger
 
@@ -204,8 +200,6 @@ def get_name_from_path(fpath: str):
         return fname.split('.csv')[0]
     elif '.npz' in fname:
         return fname.split('.npz')[0]
-    elif '.h5' in fname:
-        return fname.split('.h5')[0]
     elif '.out' in fname:
         return fname.split('.out')[0]
     else:
@@ -220,37 +214,17 @@ def get_dir_from_path(fpath: str):
     return fpath.rsplit('/', 1)[0]
 
 
-def load_data_cache(cache_path: str, hdf5_file: TextIO = None):
+def load_data_cache(cache_path: str):
     """
     Loads a .npz file, including pickled metadata.
     """
 
-    # if hdf5 file exists, load from it
-    if hdf5_file is not None:
-        data = {}
-
-        try:
-            group = hdf5_file[get_name_from_path(cache_path)]
-            # logger.info('Group Name: ', get_name_from_path(cache_path))
-            # logger.info('Group Keys: ', group.keys())
-            for data_label in group.keys():
-                data[data_label] = group[data_label][()]  # read dataset into numpy array
-            logger.info(f"Loaded npz data cache from h5py file...")
-
-        except KeyError:
-            logger.info(f"Could not load hdf5 key {cache_path}...")
-            if os.path.exists(cache_path):
-                data = np.load(cache_path, allow_pickle=True)
-                logger.info(f"Loaded npz data cache from {cache_path}...")
-            else:
-                return None
+    if os.path.exists(cache_path):
+        data = np.load(cache_path, allow_pickle=True)
+        logger.info(f"Loaded npz data cache from {cache_path}...")
     else:
-        if os.path.exists(cache_path):
-            data = np.load(cache_path, allow_pickle=True)
-            logger.info(f"Loaded npz data cache from {cache_path}...")
-        else:
-            logger.warning(f"NPZ cache file: {cache_path} does not exist, returning None!!!")
-            return None
+        logger.warning(f"NPZ cache file: {cache_path} does not exist, returning None!!!")
+        return None
     return data
 
 
@@ -264,53 +238,6 @@ def save_npz_data_cache(npz_cache_path: str,
     # np.savez(npz_cache_path, **array_dict, meta=np.array(meta, dtype=object))
     np.savez(npz_cache_path, **array_dict)
     logger.info(f"Saved npz data cache to {npz_cache_path}...")
-
-
-def save_combined_hdf5_cache(out_cache_fpath: str,
-                             npz_fpath_stub: str):
-    """
-    Combines several npz files into a single hdf5 cache file with compression
-    """
-
-    # Set your directory and output path
-    npz_files = glob.glob(f"{npz_fpath_stub}*.npz")
-    assert len(npz_files) > 0, f"No .npz files detected with fpath stub {npz_fpath_stub}"
-
-    logger.info(f"Compressing {len(npz_files)} .npz files to {out_cache_fpath}...")
-
-    with h5py.File(out_cache_fpath, "w") as h5f:
-
-        for i, path in enumerate(npz_files):
-            logger.info(f'Processing {path}...')
-            name = os.path.splitext(os.path.basename(path))[0]  # filename without .npz
-            npz_data = np.load(path, allow_pickle=True)
-
-            # create a group for this npz file
-            group = h5f.create_group(name)
-
-            # store each array inside the group, ignoring meta object arrays
-            for key in npz_data.files:
-                data = npz_data[key]
-                if data.dtype == object:  
-                    continue
-                print('Dtype: ', data.dtype)
-                if '<U' in str(data.dtype):
-                    data = data.astype('S2')
-                group.create_dataset(key, data=data, **hdf5plugin.Zstd(clevel=22))  # use ztsd compression
-                # group.create_dataset(key, data=data, compression="lzw")  # use lzw
-
-            if i % 10 == 0:
-                logger.info(f"Processed {i} / {len(npz_files)} npz files...")
-
-    logger.info(f"Converted {len(npz_files)} files to {out_cache_fpath}...")
-
-
-def load_hdf5_cache(out_cache_fpath: str = OUT_CACHE_FPATH) -> Union[h5py.File, None]:
-
-    if os.path.exists(out_cache_fpath):
-        return h5py.File(out_cache_fpath, 'r')
-    else:
-        return None
 
 
 def load_isolated_atom_energies(fpath: str):

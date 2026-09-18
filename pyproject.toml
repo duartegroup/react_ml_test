@@ -31,8 +31,6 @@ dependencies = [
     "seaborn",
     "scikit-learn",
     "PyYAML",
-    "h5py",
-    "hdf5plugin",
 ]
 
 [project.urls]

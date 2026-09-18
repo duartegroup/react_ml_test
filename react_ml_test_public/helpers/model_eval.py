@@ -1,7 +1,7 @@
 """
 Helpers for eval of models.
 """
-from typing import Callable, Literal, Tuple, List, TextIO
+from typing import Callable, Literal, Tuple, List
 import numpy as np
 from react_ml_test_public.helpers.io import flexible_ase_read, get_name_from_path, load_isolated_atom_energies, load_data_cache, load_model_calculator, save_npz_data_cache
 from react_ml_test_public.helpers.settings import EV, EV_PER_AMSTRONG, MEV, MEV_PER_AMSTRONG, MEV_PER_ATOM, NPZ_DIR
@@ -22,8 +22,7 @@ def get_model_predictions(model_name: str,
                           energy_units: Literal[EV, MEV, MEV_PER_ATOM] = MEV_PER_ATOM,
                           force_units: Literal[EV_PER_AMSTRONG, MEV_PER_AMSTRONG] = MEV_PER_AMSTRONG,
                           model_loader: str = None,
-                          enable_cueq: bool = False,
-                          hdf5_file: TextIO = None) -> list[np.ndarray]:
+                          enable_cueq: bool = False) -> list[np.ndarray]:
     """
     Generates predictions from one or more trained models on a given test dataset.
 
@@ -43,7 +42,6 @@ def get_model_predictions(model_name: str,
         force_units (Literal['meV', 'meV / A']): Desired output units for forces. Defaults to 'meV / A'.
         model_loader (str): Custom model loader (i.e. MACE, ACE, ANI...). Optional.
         enable_cueq (bool): Whether to enable cuequivariance acceleration. Defaults to False.
-        hdf5_file (TextIO): An open HDF5 file handle for storing predictions. Optional.
 
     Returns:
         list[np.ndarray]: a list of predictions by the model for each specified test_set file
@@ -72,28 +70,26 @@ def get_model_predictions(model_name: str,
                 pred_energy_offsets = load_isolated_atom_energies(pred_isolated_atom_fpath)
             elif offset_ref_fpath is not None:
                 logger.info(f"Getting model prediction per-element average offsets from {offset_ref_fpath}...")
-                pred_energy_offsets = guess_per_element_mean_energies(offset_ref_fpath, 
-                                                                    calc=calculator, 
-                                                                    calc_name=model_name, 
-                                                                    dtype=np.float32, 
+                pred_energy_offsets = guess_per_element_mean_energies(offset_ref_fpath,
+                                                                    calc=calculator,
+                                                                    calc_name=model_name,
+                                                                    dtype=np.float32,
                                                                     pbc_box=pbc_box,
-                                                                    hdf5_file=hdf5_file
                                                                     )
             else:
                 logger.info(f"Getting model prediction per-element average offsets based on test set: {test_set_fpath}...")
-                pred_energy_offsets = guess_per_element_mean_energies(test_set_fpath, 
-                                                                    calc=calculator, 
-                                                                    calc_name=model_name, 
-                                                                    dtype=np.float32, 
+                pred_energy_offsets = guess_per_element_mean_energies(test_set_fpath,
+                                                                    calc=calculator,
+                                                                    calc_name=model_name,
+                                                                    dtype=np.float32,
                                                                     pbc_box=pbc_box,
-                                                                    hdf5_file=hdf5_file
                                                                     )
         logger.info(f"Model: {model_name} Per-element means: {pred_energy_offsets}")
 
         # load cached npz file of energies / forces if it exists
         offset_str = '_no_offset' if not apply_energy_offsets else ''
         npz_cache_path = f"{NPZ_DIR}/{model_name}_{get_name_from_path(test_set_fpath)}_energies_forces{offset_str}.npz"
-        cache_data = load_data_cache(npz_cache_path, hdf5_file=hdf5_file)
+        cache_data = load_data_cache(npz_cache_path)
         if cache_data is not None:
             pred_energies, pred_forces = cache_data['energies'], cache_data['forces']
 
@@ -146,7 +142,6 @@ def get_test_and_pred_data(model_names: List[str],
                            force_units: Literal[EV_PER_AMSTRONG, MEV_PER_AMSTRONG] = MEV_PER_AMSTRONG,
                            model_loaders: List[str] = None,
                            enable_cueq: bool = False,
-                           hdf5_file: TextIO = None,
                            config_type_filter: str = None) -> Tuple[list, list, dict, dict]:
     """
     Get the test and predicted energies / forces for a set of test sets with a set of models.
@@ -165,7 +160,6 @@ def get_test_and_pred_data(model_names: List[str],
         force_units (Literal['meV', 'meV / A']): Output units for forces. Defaults to 'meV / A'.
         model_loaders (List[str]): Custom model loaders. Optional.
         enable_cueq (bool): Whether to enable cuequivariance acceleration. Defaults to False.
-        hdf5_file (TextIO): An open HDF5 file handle for storing predictions. Optional.
 
     Returns:
         Tuple[list, list, dict, dict]: two lists of test energies / forces and two dicts of per-model pred energies / forces.
@@ -229,8 +223,7 @@ def get_test_and_pred_data(model_names: List[str],
                                                                        energy_units=energy_units,
                                                                        force_units=force_units,
                                                                        model_loader=model_loader,
-                                                                       enable_cueq=enable_cueq,
-                                                                       hdf5_file=hdf5_file)
+                                                                       enable_cueq=enable_cueq)
 
         # add predictions to dictionary for each model
         all_pred_energies_dict[model_name] = model_pred_energies

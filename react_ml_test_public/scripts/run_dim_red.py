@@ -12,7 +12,6 @@ from react_ml_test_public.helpers.dim_red import run_pca, run_umap
 from react_ml_test_public.helpers.io import (
     get_name_from_path,
     load_data_cache,
-    load_hdf5_cache,
     save_npz_data_cache,
 )
 from react_ml_test_public.helpers.logging import logger
@@ -24,7 +23,6 @@ dim_red_type: Literal['PCA', 'UMAP']
 if __name__ == "__main__":
 
     input_name_stub = None
-    hdf5_file = None
 
     # ===== REFERENCE DESCRIPTORS FILES =====
     # GO-MACE-23 train set
@@ -35,9 +33,8 @@ if __name__ == "__main__":
 
     # SPICE training set in batches
     # model_name = 'MACE-OFF23_medium'
-    # input_name_stub = f"{DESCRIPTORS_DIR}/spice_train_batch_*mace_desc.npz"  
+    # input_name_stub = f"{DESCRIPTORS_DIR}/spice_train_batch_*mace_desc.npz"
     # ref_fps = sorted(glob.glob(input_name_stub), key=natural_sort_key)
-    # hdf5_file = load_hdf5_cache(f"{DESCRIPTORS_DIR}/spice_train_mace_desc") 
 
     # MACE-MP0 OHC only train set in batches
     model_name = 'MACE-MP-0b3_medium'
@@ -82,7 +79,7 @@ if __name__ == "__main__":
     for i, ref_desc_fpath in enumerate(ref_fps):
 
         # load ref mace descs
-        cache_data = load_data_cache(ref_desc_fpath, hdf5_file=hdf5_file)
+        cache_data = load_data_cache(ref_desc_fpath)
         assert cache_data is not None, f'{ref_desc_fpath} not found...'
         ref_mace_desc, ref_elements, config_lens = cache_data['mace_desc'], cache_data['elements'], cache_data['config_lens']
         if np.issubdtype(ref_elements.dtype, np.bytes_):
@@ -118,7 +115,7 @@ if __name__ == "__main__":
         logger.info(f"Processing: {npz_fpath}")
     
         # load mace descs
-        cache_data = load_data_cache(npz_fpath, hdf5_file=hdf5_file)
+        cache_data = load_data_cache(npz_fpath)
         assert cache_data is not None, f'{npz_fpath} not found...'
         mace_desc, elements, config_lens = cache_data['mace_desc'], cache_data['elements'], cache_data['config_lens']
         logger.info(f"Loaded desc shape: {mace_desc.shape}")
