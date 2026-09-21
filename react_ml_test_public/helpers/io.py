@@ -513,10 +513,25 @@ def load_model_calculator(model_name: str,
 
     ``device`` is resolved first (see ``resolve_cuda_device``), so the default 'cuda:0' -
     and any 'cuda:N' that is not present on this machine - falls back to 'cpu'.
+
+    ``model_name`` is the model name alone: its '*.model' file is looked for in
+    ``MODEL_DIR`` first and then anywhere below it, so a model kept in a subdirectory
+    (e.g. ``models/fine_tuned/``) loads without the subdirectory being given in the
+    input yaml. The first name match wins.
     """
 
     # resolve the requested device before building any calculator
     device = resolve_cuda_device(device)
+
+    # resolve the model fpath, searching MODEL_DIR recursively so a model kept in a
+    # subdirectory (e.g. models/fine_tuned/) can be named by its name alone -
+    # the first match wins, with a model in MODEL_DIR itself taking precedence
+    model_fpath = f"{MODEL_DIR}/{model_name}.model"
+    if not os.path.exists(model_fpath):
+        model_fpaths = sorted(glob.glob(f"{MODEL_DIR}/**/{model_name}.model", recursive=True))
+        if model_fpaths:
+            model_fpath = model_fpaths[0]
+            logger.info(f"Found {model_name} at {model_fpath}...")
 
     try:
         with _jit_load_on_device(device):
@@ -540,7 +555,7 @@ def load_model_calculator(model_name: str,
                 # mace model loader (imported lazily to keep io.py importable without MACE)
                 from mace.calculators import MACECalculator
 
-                return MACECalculator(model_paths=f"{MODEL_DIR}/{model_name}.model",
+                return MACECalculator(model_paths=model_fpath,
                                       device=device,
                                       enable_cueq=enable_cueq,
                                       default_dtype=dtype,
@@ -576,7 +591,7 @@ def load_model_calculator(model_name: str,
                 from graph_pes.models import load_model
                 import torch
 
-                model = load_model(f"{MODEL_DIR}/{model_name}.model")
+                model = load_model(model_fpath)
                 model.to(dtype=torch.float64)
                 return model.ase_calculator()
             else:

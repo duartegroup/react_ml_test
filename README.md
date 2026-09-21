@@ -8,15 +8,17 @@ An ORA repository of trained models, data, and other supplementary results can b
 
 1. Clone / fork this repository.
    
-2. This repository has dependencies with [mlptrain](https://github.com/duartegroup/mlp-train). Clone `mlptrain` and run the `./install_mace.sh` script - this provides the conda environment named `mlptrain-mace`. Then:
+2. This repository has dependencies with [mlptrain](https://github.com/duartegroup/mlp-train). Clone `mlptrain` (WARNING: if your local machine does not have a GPU, you will need to modify the `environment_mace.yml` file by removing the last 3 lines for the pip cuequivariance dependencies before running the installation script). Then, run the `./install_mace.sh` script - this provides the conda environment named `mlptrain-mace`. 
+
+Then:
    
    ```bash
    conda activate mlptrain-mace
-   pip install --upgrade mace-torch
+   pip install mace-torch==0.3.15
    pip install --upgrade ase
    ```
 
-3. Install this package into the environment. **This install is required** — it provides the
+3. Install the current package into the environment. This provides the
    `rmlt` command used to run the workflow scripts (see [Running the scripts](#running-the-scripts)). An editable install is recommended while developing:
    
    ```bash
@@ -26,10 +28,8 @@ An ORA repository of trained models, data, and other supplementary results can b
 
 Notes:
 - Run all scripts from the repository root directory. The scripts read `data/`, `models/`, `inputs/` and write to `out/` relative to the current working directory, so they must be launched from the repo root (or a directory containing these folders).
-- Every YAML input that runs MLIP calculations takes a `cuda_device` field (default `"cuda:0"`). Set it to `"cpu"` to run on CPU, or to another GPU index (e.g. `"cuda:1"`) to pick a different card. If the requested device is not found on the machine — no GPU at all, or an index that does not exist — the scripts log a warning and fall back to `"cpu"` rather than failing. CPU runs also work on machines where CUDA is not visible to PyTorch at all: MACE models embed compiled e3nn submodules that e3nn reloads with a device-preserving `torch.jit.load`, so `load_model_calculator` injects the requested device into that call (`_jit_load_on_device` in `react_ml_test_public/helpers/io.py`).
-- Only lightweight, PyPI-only dependencies are listed in `pyproject.toml`. The MLIP stack (MACE, mlptrain, autode, torchani, graph-pes, load-atoms, etc.) is installed via the `mlptrain-mace` environment.
-- For some features a specific fork of MACE is required (e.g. train loss logging + patience warmup, please let me know if you need these features!)
 - To run the ani-1nxr model, you must have the neurchem project in the parent directory of this repo. You must also then ensure you have the `libcublas.so.9.2` file (from CUDA 9.2) added to the `LD_LIBRARY_PATH`.
+- For some features a specific fork of MACE is required (e.g. train loss logging + patience warmup, please let me know if you need these features!)
 
 ## Running scripts
 
@@ -54,7 +54,7 @@ python -m react_ml_test_public.scripts.run_test_set_comparison
 
 ## Examples
 
-Note: these examples will load precalculated .npz results to produce figures, as running the calculations requires the respective models (and a GPU is recommended, although each YAML's `cuda_device` can be set to `"cpu"`). To run the examples below: .npz files of saved results in the ORA repository (`results/npz`) linked at the top of this file should be copied to `react_ml_test_public/out/npz`, and models from the ORA repository (`models/`) should be copied to `react_ml_test_public/models/`. If you wish to re-calculate results from scratch, clear all cache .npz files by running `rmlt clear-npz-cache`. 
+Note: these examples will load precalculated .npz results to produce figures, as running the calculations requires the respective models (and a GPU is recommended, although each YAML's `cuda_device` can be set to `"cpu"`). To run the examples below: .npz files of saved results in the ORA repository (`results/npz`) linked at the top of this file should be copied to replace `react_ml_test_public/out/npz`, and models from the ORA repository (`models/`) should be copied to replace `react_ml_test_public/models/`. If you wish to re-calculate results from scratch, clear all cache .npz files by running `rmlt clear-npz-cache` (or simply do not copy them in). 
 
 ### 1. Test set energy + force errors:
 
@@ -151,9 +151,7 @@ This can be run for the other two systems using the provided yaml inputs: `input
 
 ### 2. Analysis
 
-- `rmlt run-test-set-comparison`
-  - DESCRIPTION: Runs the main energy / force comparisons of a selection of specified models. Precalculated results will be loaded from cached npz files.
-  - USAGE: Add relevant parameters in the python script and then run.
+- `rmlt run-test-set-comparison`. Runs the main energy / force comparisons of a selection of specified models. Precalculated results will be loaded from cached npz files.
 
 ## Package layout
 
@@ -166,4 +164,12 @@ models/                   # store MLIP models here
 inputs/                   # input YAML files for scripts
 out/                      # runtime outputs stored here
 testing/                  # some additional testing
+```
+
+## Citation
+
+If you use this code or dataset in your work, please cite:
+
+```text
+Holownia, J.; Juraskova, V.; Deringer, V. L.; Duarte, F. Data-Efficient Fine-Tuning for Reaction Modelling in Explicit Solvent. ChemRxiv 2026 (0810). https://doi.org/10.26434/chemrxiv.15007217/v1
 ```

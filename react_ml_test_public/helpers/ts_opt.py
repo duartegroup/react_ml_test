@@ -196,7 +196,7 @@ def get_vib_freq(input_config_fp: str,
     vib_mode_fp = f"{out_dir}/{save_name}_vib_mode_{n}.xyz" 
     ase_write(vib_mode_fp, vib_mode_configs, format='xyz')
     os.remove(old_vib_mode_fp)
-    logger.info(f"Saved vib mode {n} to: {out_dir}/{vib_mode_fp.replace('.traj', '.xyz')}")
+    logger.info(f"Saved vib mode {n} to: {vib_mode_fp}")
 
     # remove cache directory
     vib.clean()
