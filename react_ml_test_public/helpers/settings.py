@@ -106,20 +106,47 @@ SIMILARITIES_DIR = f"{OUT_DIR}/similarities"
 CHEMISCOPE_DIR = f"{OUT_DIR}/chemiscope"
 
 
+def resolve_out_root(out_dir: str = None) -> str:
+    """
+    Resolve an output root directory, defaulting to ``OUT_DIR``.
+
+    A YAML input can set ``out_dir`` to write its outputs somewhere other than the default
+    ``OUT_DIR`` (e.g. when running from a directory other than the repository root); passing
+    None falls back to ``OUT_DIR``.
+
+    :param out_dir: output root directory, or None to use OUT_DIR.
+    :return: the output root directory.
+    """
+    return OUT_DIR if out_dir is None else str(out_dir)
+
+
 def resolve_out_dirs(out_dir: str = None) -> tuple[str, str, str]:
     """
     Resolve an output root directory into the subdirectories used by the workflow scripts.
 
-    A YAML input can set ``out_dir`` to write its outputs somewhere other than the default
-    ``OUT_DIR`` (e.g. when running from a directory other than the repository root); passing
-    None falls back to ``OUT_DIR``. The subdirectory layout matches the one defined above,
-    i.e. plots under ``<out_dir>/plt`` and CSVs under ``<out_dir>/csv``.
+    The subdirectory layout matches the one defined above, i.e. plots under
+    ``<out_dir>/plt`` and CSVs under ``<out_dir>/csv`` (see ``resolve_out_root`` for how
+    ``out_dir`` itself is resolved).
 
     :param out_dir: output root directory, or None to use OUT_DIR.
     :return: (out_dir, plot_dir, csv_dir)
     """
-    out_dir = OUT_DIR if out_dir is None else str(out_dir)
+    out_dir = resolve_out_root(out_dir)
     return out_dir, f"{out_dir}/plt", f"{out_dir}/csv"
+
+
+def resolve_traj_dir(out_dir: str = None) -> str:
+    """
+    Resolve the MD trajectory output directory under an output root directory.
+
+    Trajectories go under ``<out_dir>/trj`` - matching the ``TRAJ_DIR`` layout the default
+    ``OUT_DIR`` gives - so a YAML that sets ``out_dir`` (e.g. for run_mlip_md.py) writes them
+    alongside the rest of that run's outputs (see ``resolve_out_root``).
+
+    :param out_dir: output root directory, or None to use OUT_DIR.
+    :return: the trajectory output directory.
+    """
+    return f"{resolve_out_root(out_dir)}/trj"
 
 
 def resolve_data_path(fpath: str, data_dir: str = None) -> str:

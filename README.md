@@ -18,8 +18,7 @@ Then:
    pip install --upgrade ase
    ```
 
-3. Install the current package into the environment. This provides the
-   `rmlt` command used to run the workflow scripts (see [Running the scripts](#running-the-scripts)). An editable install is recommended while developing:
+3. Install the current package into the environment. This provides the `rmlt` command used to run the workflow scripts (see [Running the scripts](#running-the-scripts)). An editable install is recommended while developing (run from within the `react_ml_test/` directory):
    
    ```bash
    pip install -e .

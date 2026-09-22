@@ -44,6 +44,8 @@ from react_ml_test_public.helpers.settings import (
     TRAJ_DIR,
     resolve_data_path,
     resolve_out_dirs,
+    resolve_out_root,
+    resolve_traj_dir,
 )
 
 
@@ -576,6 +578,12 @@ def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
     options. The script builds the ``formatted_model_names`` (trajectory-name labels)
     from these. Returns a flat dict of the config variables that the script's
     ``__main__`` declares.
+
+    Data / output directories may be set per-YAML with the optional ``data_dir`` and ``out_dir``
+    fields, which default to ``DATA_DIR`` / ``OUT_DIR`` from settings.py. A relative
+    ``init_configs_fpath`` that does not resolve from the current working directory is taken to
+    be relative to ``data_dir``, and trajectories are written under ``out_dir`` (see
+    ``resolve_traj_dir``, i.e. ``<out_dir>/trj``).
     """
     input_config = _load_yaml_config(input_yaml_fpath, parser)
 
@@ -596,7 +604,21 @@ def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
             _error(parser, "'box_dim' must be a list of 3 box lengths in Angstrom.")
         return value
 
+    # ===== data / output directories =====
+    # defaults come from settings.py, so a YAML only needs to set these when it should read /
+    # write somewhere other than the DATA_DIR / OUT_DIR the run was started from
+    data_dir = input_config.get("data_dir", DATA_DIR)
+    out_dir = resolve_out_root(input_config.get("out_dir", OUT_DIR))
+    traj_dir = resolve_traj_dir(out_dir)
+
     # ===== system / starting configs =====
+    # init_configs_fpath is optional: when unset, each model's optimised TS (out/opt) is used
+    init_configs_fpath = input_config.get("init_configs_fpath", None)
+    if init_configs_fpath is not None:
+        init_configs_fpath = resolve_data_path(str(init_configs_fpath), data_dir)
+        if not os.path.isfile(init_configs_fpath):
+            _error(parser, f"init_configs_fpath not found: {init_configs_fpath!r} "
+                           f"(relative paths are taken as relative to data_dir: {data_dir!r}).")
     system_name = str(_need("system_name"))
     include_solvent = _as_bool(input_config.get("include_solvent", False), default=False)
     if include_solvent:
@@ -638,6 +660,10 @@ def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
     cuda_device = str(input_config.get("cuda_device", "cuda:0"))
 
     return {
+        "data_dir": data_dir,
+        "out_dir": out_dir,
+        "traj_dir": traj_dir,
+        "init_configs_fpath": init_configs_fpath,
         "system_name": system_name,
         "include_solvent": include_solvent,
         "solvent_name": solvent_name,
