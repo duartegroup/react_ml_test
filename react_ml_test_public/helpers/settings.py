@@ -7,9 +7,11 @@ from typing import List, Literal, NamedTuple
 
 import matplotlib.pyplot as plt
 
+#  os.environ.get("USER")
+
 # set root dir for inputs / outputs
 if any(x in platform.node() for x in ('htc', 'arc')):
-    root_data_dir = os.path.join(os.environ["DATA"], os.environ.get("USER"))
+    root_data_dir = os.path.join(os.environ["DATA"] + '/')
 else:
     root_data_dir = "./" 
 

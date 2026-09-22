@@ -235,6 +235,8 @@ def guess_per_element_mean_energies(
         if cache_data is not None:
             energies = cache_data['energies']
         else:
+            if calc is None:
+                raise OSError(f"NO MODEL CALCULATOR, AND NO NPZ CACHE FOUND for {model_name}. Add {model_name} to ./models and try again.")
             print('Calculating energies...')
             # calculate energies
             energies = []
