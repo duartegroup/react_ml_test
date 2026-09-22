@@ -40,6 +40,7 @@ def run_md_eval(init_configs: list,
                 model_name: str,
                 formatted_model_name: str,
                 system_name: str,
+                traj_dir: str = TRAJ_DIR,
                 constraint: str = None,# IndexedConstraint = None,
                 enable_cueq: bool = False,
                 override_saved: bool = False,
@@ -58,7 +59,7 @@ def run_md_eval(init_configs: list,
             start_time = time()
             traj_name = f'{system_name}_{formatted_model_name}_{md_config.temp}K_{md_config.fs / PS}ps_config_{i}_run_{j}'
 
-            out_trj_name = f"{TRAJ_DIR}/{traj_name}_traj.xyz"
+            out_trj_name = f"{traj_dir}/{traj_name}_traj.xyz"
             if os.path.exists(out_trj_name) and not override_saved:
                 logger.info(f"{out_trj_name} already exists, skipping...")
                 continue
@@ -67,6 +68,7 @@ def run_md_eval(init_configs: list,
                                                  model_name,
                                                  md_config,
                                                  traj_name,
+                                                 out_dir=traj_dir,
                                                  constraint=constraint,
                                                  cuda_device=cuda_device,
                                                  override_cache=override_saved)
@@ -93,6 +95,13 @@ if __name__ == "__main__":
     Input YAML format (see inputs/md/CPD_MVK_DA_dynamics_vac.yaml for a full example):
 
     Fields:
+        init_configs_fpath:   # optional starting-config file (e.g. a solvated config), read as
+                              # relative to data_dir when it does not resolve from the cwd; when
+                              # unset, each model's optimised TS in out/opt is used.
+        data_dir:             # data root that a relative init_configs_fpath resolves against
+                              # (defaults to DATA_DIR in settings).
+        out_dir:              # output root; trajectories are written to <out_dir>/trj
+                              # (defaults to OUT_DIR in settings).
         system_name:          # system name; also prefixes the starting-config filenames.
         include_solvent:      # true: start from in-solvent-optimised TS, false: vacuum TS.
         solvent_name:         # solvent used in the starting-config filenames (include_solvent only).
@@ -146,6 +155,10 @@ if __name__ == "__main__":
     resolved = rmlt_inputs.resolve_mlip_md_yaml(args.input_yaml, parser)
 
     # === 1. SYSTEM / STARTING CONFIGS ===
+    init_configs_fpath = resolved["init_configs_fpath"]
+    data_dir = resolved["data_dir"]
+    out_dir = resolved["out_dir"]
+    traj_dir = resolved["traj_dir"]
     system_name = resolved["system_name"]
     include_solvent = resolved["include_solvent"]
     solvent_name = resolved["solvent_name"]
@@ -197,24 +210,32 @@ if __name__ == "__main__":
     logger.info(f'Evaluating models: {model_names}')
 
     # === 5. INIT CONFIG SET (OPTIMISED TS PER MODEL) ===
-    if include_solvent:
-        init_config_set_fpaths = [f"{OPT_DIR}/{system_name}_in_{solvent_name}_{model_name}_opt_TS.xyz" for model_name in model_names]
-        formatted_system_names = [f"{system_name}_{solvent_name}_opt_TS" for _ in model_names]
+    logger.info(f"Reading configs relative to data_dir: {data_dir}, "
+                f"writing trajectories under out_dir: {out_dir} (i.e. {traj_dir})")
+    os.makedirs(traj_dir, exist_ok=True)
+
+    if init_configs_fpath is None:
+        if include_solvent:
+            init_configs_fpaths = [f"{OPT_DIR}/{system_name}_in_{solvent_name}_{model_name}_opt_TS.xyz" for model_name in model_names]
+            formatted_system_names = [f"{system_name}_{solvent_name}_opt_TS" for _ in model_names]
+        else:
+            init_configs_fpaths = [f"{OPT_DIR}/{system_name}_vac_{model_name}_opt_TS.xyz" for model_name in model_names]
+            formatted_system_names = [f"{system_name}_vac_opt_TS" for _ in model_names]
     else:
-        init_config_set_fpaths = [f"{OPT_DIR}/{system_name}_vac_{model_name}_opt_TS.xyz" for model_name in model_names]
-        formatted_system_names = [f"{system_name}_vac_opt_TS" for _ in model_names]
+        init_configs_fpaths = [init_configs_fpath for _ in model_names]
+        formatted_system_names = [f"{system_name}_{model_name}" for model_name in model_names]
 
     # ====================================================
 
     # run model MD run
-    for init_config_set_fpath, model_name, formatted_model_name, formatted_system_name in zip(init_config_set_fpaths, model_names, formatted_model_names, formatted_system_names):
+    for init_configs_fpath, model_name, formatted_model_name, formatted_system_name in zip(init_configs_fpaths, model_names, formatted_model_names, formatted_system_names):
 
         # load ase structure
-        init_configs = read(init_config_set_fpath, f'0:{num_init_configs}')
+        init_configs = read(init_configs_fpath, f'0:{num_init_configs}')
 
         logger.info(f"Init Config Cell: {init_configs[0].cell}")
         logger.info(f"Init Config PBC: {init_configs[0].pbc}")
-        logger.info(f"Loaded first {len(init_configs)} configurations from {init_config_set_fpath}...")
+        logger.info(f"Loaded first {len(init_configs)} configurations from {init_configs_fpath}...")
         logger.info(f"Evaluating model: {model_name}...")
 
         if box_dim is not None:
@@ -230,6 +251,7 @@ if __name__ == "__main__":
                                    model_name,
                                    formatted_model_name,
                                    formatted_system_name,
+                                   traj_dir=traj_dir,
                                    constraint=constraint,
                                    enable_cueq=enable_cueq,
                                    override_saved=override_saved,
