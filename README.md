@@ -51,6 +51,33 @@ Scripts can also be run as ordinary modules, if you prefer:
 python -m react_ml_test_public.scripts.run_test_set_comparison
 ```
 
+### Submitting to a SLURM cluster
+
+On a cluster, `rmlt slurm` queues a script through `sbatch` rather than running it here:
+
+```bash
+rmlt slurm run-mlip-md inputs/md/CPD_MVK_DA_dynamics_vac.yaml
+```
+
+The job is submitted with `slurm/slurm_script.sh`, a generic script that runs `rmlt` with the arguments it
+is given. **The `#SBATCH` lines in that script are the job's resources** - partition, time, memory,
+GPU and cluster - and they are meant to be edited by hand to suit the run.
+
+To see what would be submitted, and which resources the script asks for, without queueing anything:
+
+```bash
+rmlt slurm --dry-run run-mlip-md inputs/md/CPD_MVK_DA_dynamics_vac.yaml
+```
+
+Individual sbatch options can also be overridden for a single submission, which is convenient when
+a run needs more time or a different partition than the script's header provides:
+
+```bash
+rmlt slurm --time=12:00:00 --partition=medium run-mlip-md inputs/md/CPD_MVK_DA_dynamics_vac.yaml
+```
+
+Submit from the repository root, as `slurm/slurm_script.sh` and the input YAML are both resolved relative to the working directory.
+
 ## Examples
 
 Note: these examples will load precalculated .npz results to produce figures, as running the calculations requires the respective models (and a GPU is recommended, although each YAML's `cuda_device` can be set to `"cpu"`). To run the examples below: .npz files of saved results in the ORA repository (`results/npz`) linked at the top of this file should be copied to replace `react_ml_test_public/out/npz`, and models from the ORA repository (`models/`) should be copied to replace `react_ml_test_public/models/`. If you wish to re-calculate results from scratch, clear all cache .npz files by running `rmlt clear-npz-cache` (or simply do not copy them in). 
@@ -163,6 +190,7 @@ models/                   # store MLIP models here
 inputs/                   # input YAML files for scripts
 out/                      # runtime outputs stored here
 testing/                  # some additional testing
+slurm/                    # slurm submission scripts (`rmlt slurm <script> <input.yaml>`)
 ```
 
 ## Citation

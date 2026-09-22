@@ -3,6 +3,7 @@ Config file containing file paths for data and outputs, and other general settin
 """
 import os
 import platform
+from string import Template
 from typing import List, Literal, NamedTuple
 
 import matplotlib.pyplot as plt
@@ -106,18 +107,56 @@ SIMILARITIES_DIR = f"{OUT_DIR}/similarities"
 CHEMISCOPE_DIR = f"{OUT_DIR}/chemiscope"
 
 
+def expand_env_vars(path: str) -> str:
+    """
+    Expand ``$VAR`` / ``${VAR}`` references in a path from the environment.
+
+    Lets a YAML input name a location that is only known at run time - e.g. the shared
+    ``$DATA/models`` on a cluster, which has no fixed absolute path::
+
+        model_dir: "$DATA/models"
+
+    A variable that is not set is an error rather than being left in place, because a
+    literal ``$DATA/models`` directory would otherwise be searched and reported as a
+    missing model, hiding the real cause. ``$$`` gives a literal ``$``.
+
+    Note this is separate from, and applied after, the ``${...}`` templating that a YAML
+    input does against its own keys (see ``substitute_yaml_variables``), so a
+    ``${data_dir}``-style reference to another field is resolved before this runs and is
+    never mistaken for an unset environment variable.
+
+    :param path: path that may contain ``$VAR`` / ``${VAR}`` references.
+    :return: the path with those references expanded.
+    :raises ValueError: if a referenced variable is not set, or the reference is malformed.
+    """
+    try:
+        return Template(str(path)).substitute(os.environ)
+    except KeyError as exc:
+        name = exc.args[0]
+        raise ValueError(
+            f"{name!r} in {path!r} is neither an environment variable nor a key defined in "
+            f"this input YAML (use '$$' for a literal '$')"
+        ) from None
+    except ValueError as exc:
+        raise ValueError(
+            f"could not expand the environment variables in {path!r}: {exc} "
+            f"(use '$$' for a literal '$')"
+        ) from None
+
+
 def resolve_out_root(out_dir: str = None) -> str:
     """
     Resolve an output root directory, defaulting to ``OUT_DIR``.
 
     A YAML input can set ``out_dir`` to write its outputs somewhere other than the default
     ``OUT_DIR`` (e.g. when running from a directory other than the repository root); passing
-    None falls back to ``OUT_DIR``.
+    None falls back to ``OUT_DIR``. ``$VAR`` / ``${VAR}`` references are expanded from the
+    environment (see ``expand_env_vars``).
 
     :param out_dir: output root directory, or None to use OUT_DIR.
     :return: the output root directory.
     """
-    return OUT_DIR if out_dir is None else str(out_dir)
+    return OUT_DIR if out_dir is None else expand_env_vars(out_dir)
 
 
 def resolve_out_dirs(out_dir: str = None) -> tuple[str, str, str]:
@@ -157,16 +196,40 @@ def resolve_data_path(fpath: str, data_dir: str = None) -> str:
     existing inputs that spell out e.g. ``data/reaction_data/...`` keep working), are returned
     unchanged; anything else is taken to be relative to ``data_dir`` (default ``DATA_DIR``).
     A path that resolves under neither is returned as written, so a typo is reported against the
-    path the input actually spells out.
+    path the input actually spells out. Both arguments may reference environment variables
+    (see ``expand_env_vars``).
 
     :param fpath: data file path from the input YAML.
     :param data_dir: data root directory, or None to use DATA_DIR.
     :return: the resolved path.
     """
-    if fpath is None or os.path.isabs(fpath) or os.path.exists(fpath):
+    if fpath is None:
         return fpath
+    fpath = expand_env_vars(fpath)
+    if os.path.isabs(fpath) or os.path.exists(fpath):
+        return fpath
+    if data_dir is not None:
+        data_dir = expand_env_vars(data_dir)
     data_fpath = os.path.join(DATA_DIR if data_dir is None else str(data_dir), fpath)
     return data_fpath if os.path.exists(data_fpath) else fpath
+
+
+def resolve_model_dir(model_dir: str = None) -> str:
+    """
+    Resolve a model directory, defaulting to ``MODEL_DIR``.
+
+    A YAML input can set ``model_dir`` to load its models from somewhere other than the
+    default ``MODEL_DIR`` - e.g. a repository that keeps its own ``models/`` directory
+    alongside its own ``inputs/`` (the same way ``data_dir`` and ``out_dir`` let it keep
+    its own data and outputs), or a location only known at run time such as the shared
+    ``$DATA/models`` on a cluster. Passing None falls back to ``MODEL_DIR``, which is what
+    every input that does not set the field gets. ``$VAR`` / ``${VAR}`` references are
+    expanded from the environment (see ``expand_env_vars``).
+
+    :param model_dir: model directory, or None to use MODEL_DIR.
+    :return: the model directory.
+    """
+    return MODEL_DIR if model_dir is None else expand_env_vars(model_dir)
 
 # TEST PATHS
 TEST_DIR = "testing"

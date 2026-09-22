@@ -38,7 +38,6 @@ from react_ml_test_public.helpers.settings import (
     GUAJADIAL_DA_DATA_DIR,
     ISOLATED_ATOMS_DIR,
     MACE_MODEL_LOADER,
-    MODEL_DIR,
     MODELS,
     PAPER_MODEL_COLOURS,
     PAPER_MODELS,
@@ -106,7 +105,8 @@ def run_model_comparison_on_test_set(model_names: List[str],
                                                                                                               pbc_box=pbc_box,
                                                                                                               config_type_filter=config_type_filter,
                                                                                                               cuda_device=cuda_device,
-                                                                                                              enable_cueq=enable_cueq)
+                                                                                                              enable_cueq=enable_cueq,
+                                                                                                              model_dir=model_dir)
 
     # filter only specific atom ids for force comparisons
     if test_set_force_atom_ids is not None: 
@@ -442,8 +442,10 @@ if __name__ == "__main__":
 
     Input YAML format (see inputs/test/CPD_MVK_DA_FT42_test.yaml for a full example):
 
-    Fields:
+    Fields (path fields may reference environment variables, e.g. model_dir: "$DATA/models"):
         model_names:            # list of model names to compare.
+        model_dir:              # directory those models are resolved in, when they live
+                                # outside the default MODEL_DIR (defaults to MODEL_DIR).
         n:                      # training set size.
         ft_train_name:          # fine-tuning training set name.
         test_name:              # test set name.
@@ -493,6 +495,7 @@ if __name__ == "__main__":
     resolved = rmlt_inputs.resolve_test_set_comparison_yaml(args.input_yaml, parser)
 
     # input vars
+    model_dir = resolved["model_dir"]
     model_names = resolved["model_names"]
     n = resolved["n"]
     ft_train_name = resolved["ft_train_name"]

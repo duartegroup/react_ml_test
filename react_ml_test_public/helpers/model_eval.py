@@ -8,7 +8,7 @@ from typing import Callable, Literal, Tuple, List
 import numpy as np
 from react_ml_test_public.helpers.io import flexible_ase_read, get_name_from_path, load_isolated_atom_energies, load_data_cache, load_model_calculator, save_npz_data_cache
 from react_ml_test_public.helpers.plot import index_plot
-from react_ml_test_public.helpers.settings import CSV_DIR, EV, EV_PER_AMSTRONG, KCAL_PER_MOL, MEV, MEV_PER_AMSTRONG, MEV_PER_ATOM, MODEL_DIR, NPZ_DIR, PAPER_MODEL_COLOURS, PLOT_DIR, PlotSettings
+from react_ml_test_public.helpers.settings import CSV_DIR, EV, EV_PER_AMSTRONG, KCAL_PER_MOL, MEV, MEV_PER_AMSTRONG, MEV_PER_ATOM, NPZ_DIR, PAPER_MODEL_COLOURS, PLOT_DIR, PlotSettings, resolve_model_dir
 from react_ml_test_public.helpers.stats import calculate_rmse_on_errors
 from react_ml_test_public.helpers.utils import convert_units, get_ase_props
 from react_ml_test_public.helpers.utils import calc_energy_shifts, guess_per_element_mean_energies
@@ -28,7 +28,8 @@ def get_model_predictions(model_name: str,
                           energy_units: Literal[EV, MEV, MEV_PER_ATOM] = MEV_PER_ATOM,
                           force_units: Literal[EV_PER_AMSTRONG, MEV_PER_AMSTRONG] = MEV_PER_AMSTRONG,
                           model_loader: str = None,
-                          enable_cueq: bool = False) -> list[np.ndarray]:
+                          enable_cueq: bool = False,
+                          model_dir: str = None) -> list[np.ndarray]:
     """
     Generates predictions from one or more trained models on a given test dataset.
 
@@ -56,10 +57,11 @@ def get_model_predictions(model_name: str,
     input_energy_units = EV
     input_force_units = EV_PER_AMSTRONG
 
-    calculator = load_model_calculator(model_name, 
-                                       device=cuda_device, 
-                                       model_loader=model_loader, 
-                                       enable_cueq=enable_cueq)
+    calculator = load_model_calculator(model_name,
+                                       device=cuda_device,
+                                       model_loader=model_loader,
+                                       enable_cueq=enable_cueq,
+                                       model_dir=model_dir)
 
     model_pred_energies, model_pred_forces = [], []
     for j, test_set_fpath in enumerate(test_set_fpaths):
@@ -148,7 +150,8 @@ def get_test_and_pred_data(model_names: List[str],
                            force_units: Literal[EV_PER_AMSTRONG, MEV_PER_AMSTRONG] = MEV_PER_AMSTRONG,
                            model_loaders: List[str] = None,
                            enable_cueq: bool = False,
-                           config_type_filter: str = None) -> Tuple[list, list, dict, dict]:
+                           config_type_filter: str = None,
+                           model_dir: str = None) -> Tuple[list, list, dict, dict]:
     """
     Get the test and predicted energies / forces for a set of test sets with a set of models.
 
@@ -224,6 +227,7 @@ def get_test_and_pred_data(model_names: List[str],
                                                                        offset_ref_fpath=offset_ref_fpath,
                                                                        pred_isolated_atom_fpath=pred_isolated_atom_fpath,
                                                                        custom_xyz_parsers=custom_xyz_parsers,
+                                                                       model_dir=model_dir,
                                                                        cuda_device=cuda_device,
                                                                        pbc_box=pbc_box,
                                                                        energy_units=energy_units,
@@ -264,13 +268,14 @@ def reaction_barrier_comparison(model_names: List[str],
                                 ref_point_labels: List[str] = None,
                                 cuda_device: str = "cuda:0",
                                 plot_dir: str = None,
-                                csv_dir: str = None):
+                                csv_dir: str = None,
+                                model_dir: str = None):
     """
     Compare a selection of MLIP models along an IRC trajectory, and write the resulting
     energy-error / reaction-profile / force-error plots and per-model CSV to disk.
 
     For each name in ``run_names`` the models are either taken from ``model_names`` as listed
-    (the unnamed ``['']`` run) or discovered in ``MODEL_DIR`` by glob, as selected by
+    (the unnamed ``['']`` run) or discovered in ``model_dir`` by glob, as selected by
     ``run_type``. Everything is saved under ``plot_dir/irc`` and ``csv_dir``, named after the
     trajectory and the run's ``save_name``; both default to ``PLOT_DIR`` / ``CSV_DIR``.
 
@@ -325,6 +330,9 @@ def reaction_barrier_comparison(model_names: List[str],
     os.makedirs(f"{plot_dir}/irc", exist_ok=True)
     os.makedirs(csv_dir, exist_ok=True)
 
+    # a YAML input that sets model_dir discovers its fine-tuned / from-scratch runs there
+    model_dir = resolve_model_dir(model_dir)
+
     for run_name in run_names:
 
         if run_name != '':
@@ -332,15 +340,15 @@ def reaction_barrier_comparison(model_names: List[str],
                 base_model_name = model_names[0]
                 save_name = f"{base_model_name}_{run_name}_fine_tuned"
                 model_name_stub = f"{model_names[0]}_{run_name}_*_config_fine_tuned*"
-                model_fpaths = sorted(glob.glob(os.path.join(MODEL_DIR, model_name_stub)), key=natural_sort_key)
-                assert len(model_fpaths) > 0, f"No files detected in directory {MODEL_DIR} with name stub {model_name_stub}..."
+                model_fpaths = sorted(glob.glob(os.path.join(model_dir, model_name_stub)), key=natural_sort_key)
+                assert len(model_fpaths) > 0, f"No files detected in directory {model_dir} with name stub {model_name_stub}..."
                 model_names = [base_model_name] + [get_name_from_path(model_fpath) for model_fpath in model_fpaths]
 
             elif run_type == 'from_scratch':
                 save_name = f"{from_scratch_name}_from_scratch_{run_name}"
                 model_name_stub = f"{from_scratch_name}_from_scratch_{run_name}_*_config*"
-                model_fpaths = sorted(glob.glob(os.path.join(MODEL_DIR, model_name_stub)), key=natural_sort_key)
-                assert len(model_fpaths) > 0, f"No files detected in directory {MODEL_DIR} with name stub {model_name_stub}..."
+                model_fpaths = sorted(glob.glob(os.path.join(model_dir, model_name_stub)), key=natural_sort_key)
+                assert len(model_fpaths) > 0, f"No files detected in directory {model_dir} with name stub {model_name_stub}..."
                 model_names = [get_name_from_path(model_fpath) for model_fpath in model_fpaths]
 
         print("Testing models: ", model_names)
@@ -362,7 +370,8 @@ def reaction_barrier_comparison(model_names: List[str],
                                                                                                                 custom_xyz_parsers=[custom_xyz_parser],
                                                                                                                 energy_units=energy_units,
                                                                                                                 force_units=force_units,
-                                                                                                                cuda_device=cuda_device)
+                                                                                                                cuda_device=cuda_device,
+                                                                                                                model_dir=model_dir)
 
         combined_datasets = all_test_energies
         combined_datasets.extend([pred_energies

@@ -20,11 +20,14 @@ if __name__ == "__main__":
 
     Input YAML format (see inputs/IRC/guajadial_DA_IRC_barrier.yaml for a full example):
 
-    Fields:
+    Fields (path fields may reference environment variables, e.g. model_dir: "$DATA/models"):
         data_dir:               # data root directory for relative test_trj_fpath paths
                                 # (default DATA_DIR from settings.py).
         out_dir:                # output root directory, i.e. plots go to <out_dir>/plt and
                                 # CSVs to <out_dir>/csv (default OUT_DIR from settings.py).
+        model_dir:              # directory the listed models (and, for a named run_type, the
+                                # fine-tuned / from-scratch glob) are resolved in, when they
+                                # live outside the default MODEL_DIR (default MODEL_DIR).
         n:                      # training set size.
         train_name:             # fine-tuning training set name.
         sample_str:             # sampling-strategy suffix used in fine-tuned names (e.g. "ts_gauss_").
@@ -86,6 +89,7 @@ if __name__ == "__main__":
     resolved = rmlt_inputs.resolve_reaction_barrier_comparison_yaml(args.input_yaml, parser)
 
     # ===== model / fine-tuning selection =====
+    model_dir = resolved["model_dir"]
     model_names = resolved["model_names"]
     save_name = resolved["save_name"]
     run_names = resolved["run_names"]
@@ -155,4 +159,5 @@ if __name__ == "__main__":
                                 ref_point_labels=ref_point_labels,
                                 cuda_device=cuda_device,
                                 plot_dir=plot_dir,
-                                csv_dir=csv_dir)
+                                csv_dir=csv_dir,
+                                model_dir=model_dir)

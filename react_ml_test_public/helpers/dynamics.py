@@ -18,7 +18,8 @@ def get_trajectory_with_ase(init_config: ase.Atoms,
                             out_dir: str = TRAJ_DIR,
                             constraint: str = None, # IndexedConstraint = None,
                             cuda_device: str = "cuda:0",  # falls back to 'cpu' if unavailable
-                            override_cache: bool = False):
+                            override_cache: bool = False,
+                            model_dir: str = None):
     """
 
     :param init_config_fp:
@@ -43,8 +44,9 @@ def get_trajectory_with_ase(init_config: ase.Atoms,
     dt = md_config.dt
     interval = md_config.interval
 
-    # load calculator
-    calc = load_model_calculator(model_name, device=cuda_device, dtype='float32')
+    # load calculator (model_dir None -> MODEL_DIR, see resolve_model_dir)
+    calc = load_model_calculator(model_name, device=cuda_device, dtype='float32',
+                                 model_dir=model_dir)
 
     # make copy of init config
     init_config = init_config.copy()

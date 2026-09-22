@@ -18,7 +18,7 @@ from react_ml_test_public.helpers.settings import (
     HARTREE_TO_EV,
     MACE_MODEL_LOADER,
     MACE_MODELS,
-    MODEL_DIR,
+    resolve_model_dir,
 )
 from react_ml_test_public.helpers.logging import logger
 
@@ -507,7 +507,8 @@ def load_model_calculator(model_name: str,
                           model_loader: Literal['MACE', 'ani', 'graph-pes'] = None,
                           enable_cueq: bool = False,
                           dtype: Literal["", "float32", "float64"] = "",
-                          head: str = "Default"):
+                          head: str = "Default",
+                          model_dir: str = None):
     """
     Flexible model loader for different types of model based on model_name (i.e. ACE models/ MACE models / ANI models / transformer models etc.)
 
@@ -515,20 +516,27 @@ def load_model_calculator(model_name: str,
     and any 'cuda:N' that is not present on this machine - falls back to 'cpu'.
 
     ``model_name`` is the model name alone: its '*.model' file is looked for in
-    ``MODEL_DIR`` first and then anywhere below it, so a model kept in a subdirectory
+    ``model_dir`` first and then anywhere below it, so a model kept in a subdirectory
     (e.g. ``models/fine_tuned/``) loads without the subdirectory being given in the
     input yaml. The first name match wins.
+
+    ``model_dir`` defaults to ``MODEL_DIR`` (see ``resolve_model_dir``), which a YAML
+    input can override with its ``model_dir`` field to load models from another
+    repository's ``models/`` directory.
     """
 
     # resolve the requested device before building any calculator
     device = resolve_cuda_device(device)
 
-    # resolve the model fpath, searching MODEL_DIR recursively so a model kept in a
+    # a YAML input that sets model_dir loads its models from there instead of MODEL_DIR
+    model_dir = resolve_model_dir(model_dir)
+
+    # resolve the model fpath, searching model_dir recursively so a model kept in a
     # subdirectory (e.g. models/fine_tuned/) can be named by its name alone -
-    # the first match wins, with a model in MODEL_DIR itself taking precedence
-    model_fpath = f"{MODEL_DIR}/{model_name}.model"
+    # the first match wins, with a model in model_dir itself taking precedence
+    model_fpath = f"{model_dir}/{model_name}.model"
     if not os.path.exists(model_fpath):
-        model_fpaths = sorted(glob.glob(f"{MODEL_DIR}/**/{model_name}.model", recursive=True))
+        model_fpaths = sorted(glob.glob(f"{model_dir}/**/{model_name}.model", recursive=True))
         if model_fpaths:
             model_fpath = model_fpaths[0]
             logger.info(f"Found {model_name} at {model_fpath}...")
@@ -577,8 +585,10 @@ def load_model_calculator(model_name: str,
                 energy_shifter = torchani.neurochem.load_sae(sae_fpath)
 
                 # single model
-                model_dir = f'{ANI_1XNR_MODEL_DIR}/{model_name}/train0/networks'  # noqa: E501
-                model = torchani.neurochem.load_model(consts.species, model_dir)
+                # NB: named distinctly from the model_dir argument above - this is the
+                # torchani networks directory, not the *.model search root
+                ani_networks_dir = f'{ANI_1XNR_MODEL_DIR}/{model_name}/train0/networks'  # noqa: E501
+                model = torchani.neurochem.load_model(consts.species, ani_networks_dir)
 
                 # create pipeline for computing energies
                 nnp = torchani.nn.Sequential(aev_computer, model, energy_shifter)

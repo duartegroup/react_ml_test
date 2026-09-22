@@ -42,7 +42,9 @@ from react_ml_test_public.helpers.settings import (
     OUT_DIR,
     PAPER_MODEL_COLOURS,
     TRAJ_DIR,
+    expand_env_vars,
     resolve_data_path,
+    resolve_model_dir,
     resolve_out_dirs,
     resolve_out_root,
     resolve_traj_dir,
@@ -54,6 +56,12 @@ def _error(parser, message):
     if parser is not None:
         parser.error(message)
     raise ValueError(message)
+
+
+# path fields whose $VAR / ${VAR} references are expanded from the environment while the
+# config is loaded, so an unset one is reported as a config error (see expand_env_vars);
+# path fields a script reads itself are expanded by the resolve_* helpers instead
+_ENV_EXPANDED_FIELDS = ("data_dir", "out_dir", "model_dir")
 
 
 def _load_yaml_config(input_yaml_fpath, parser=None):
@@ -71,6 +79,17 @@ def _load_yaml_config(input_yaml_fpath, parser=None):
             f"Input YAML must be a mapping of config fields (see the script format), got a "
             f"{type(input_config).__name__}: {input_yaml_fpath!r}",
         )
+
+    # environment variables are expanded after the ${...} templating above, so a
+    # ${data_dir}-style reference to another field in this YAML has already been resolved
+    # and is not mistaken for an unset environment variable
+    for field in _ENV_EXPANDED_FIELDS:
+        value = input_config.get(field)
+        if value is not None:
+            try:
+                input_config[field] = expand_env_vars(value)
+            except ValueError as exc:
+                _error(parser, str(exc))
     return input_config
 
 
@@ -117,6 +136,7 @@ def resolve_test_set_comparison_yaml(input_yaml_fpath: str, parser=None):
         "num_base_models": input_config.get("num_base_models", None),
         "num_base_model_comps": input_config.get("num_base_model_comps", None),
         "alpha_list": input_config.get("alpha_list", None),
+        "model_dir": resolve_model_dir(input_config.get("model_dir", None)),
         "cuda_device": str(input_config.get("cuda_device", "cuda:0")),
     }
 
@@ -139,6 +159,7 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
     # write somewhere other than the DATA_DIR / OUT_DIR the run was started from
     data_dir = input_config.get("data_dir", DATA_DIR)
     out_dir, plot_dir, csv_dir = resolve_out_dirs(input_config.get("out_dir", OUT_DIR))
+    model_dir = resolve_model_dir(input_config.get("model_dir", None))
 
     # ===== model / fine-tuning selection =====
     n = input_config.get("n", None)
@@ -223,6 +244,7 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
         "rep_num": rep_num,
         "omol_rep_num": omol_rep_num,
         "omol_energy_str": omol_energy_str,
+        "model_dir": model_dir,
         "model_names": model_names,
         "save_name": save_name,
         "run_names": run_names,
@@ -263,6 +285,7 @@ def resolve_pretrain_bias_analysis_yaml(input_yaml_fpath: str, parser=None):
     YAML-driven scripts; when None a ValueError is raised instead (useful for testing).
     """
     input_config = _load_yaml_config(input_yaml_fpath, parser)
+    model_dir = resolve_model_dir(input_config.get("model_dir", None))
 
     def _error(message):
         if parser is not None:
@@ -440,6 +463,7 @@ def resolve_pretrain_bias_analysis_yaml(input_yaml_fpath: str, parser=None):
         "model_full_ft_n": model_full_ft_n,
         "ref_ts_config": ref_ts_config,
         "input_lot_test_fpaths": input_lot_test_fpaths,
+        "model_dir": model_dir,
         "model_names": model_names,
         "model_plt_labels": model_plt_labels,
         "n": n,
@@ -532,6 +556,7 @@ def resolve_mlip_ts_opt_yaml(input_yaml_fpath: str, parser=None):
 
     # ===== optimiser / run settings =====
     out_dir = input_config.get("out_dir", None) or OPT_DIR
+    model_dir = resolve_model_dir(input_config.get("model_dir", None))
     fmax = float(input_config.get("fmax", 0.001))
     displace_mag = float(input_config.get("displace_mag", 0.05))
     enable_cueq = _as_bool(input_config.get("enable_cueq", False), default=False)
@@ -545,6 +570,7 @@ def resolve_mlip_ts_opt_yaml(input_yaml_fpath: str, parser=None):
         "input_config_fp": input_config_fp,
         "ref_config_fp": ref_config_fp,
         "reverse_displace": reverse_displace,
+        "model_dir": model_dir,
         "model_names": model_names,
         "system_ft_name": system_ft_name,
         "n": n,
@@ -610,6 +636,7 @@ def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
     data_dir = input_config.get("data_dir", DATA_DIR)
     out_dir = resolve_out_root(input_config.get("out_dir", OUT_DIR))
     traj_dir = resolve_traj_dir(out_dir)
+    model_dir = resolve_model_dir(input_config.get("model_dir", None))
 
     # ===== system / starting configs =====
     # init_configs_fpath is optional: when unset, each model's optimised TS (out/opt) is used
@@ -675,6 +702,7 @@ def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
         "num_init_configs": num_init_configs,
         "md_runs_per_config": md_runs_per_config,
         "box_dim": box_dim,
+        "model_dir": model_dir,
         "model_names": model_names,
         "system_ft_name": system_ft_name,
         "n": n,

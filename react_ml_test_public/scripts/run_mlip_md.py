@@ -25,7 +25,6 @@ from react_ml_test_public.helpers.settings import (
     DA_PAPER_DATA_DIR,
     DATA_DIR,
     MD_INPUT_DIR,
-    MODEL_DIR,
     MODELS,
     OPT_DIR,
     PS,
@@ -71,7 +70,8 @@ def run_md_eval(init_configs: list,
                                                  out_dir=traj_dir,
                                                  constraint=constraint,
                                                  cuda_device=cuda_device,
-                                                 override_cache=override_saved)
+                                                 override_cache=override_saved,
+                                                 model_dir=model_dir)
             end_time = time()
             md_time = end_time - start_time
             steps = float(md_config.fs / md_config.dt)
@@ -94,7 +94,7 @@ if __name__ == "__main__":
 
     Input YAML format (see inputs/md/CPD_MVK_DA_dynamics_vac.yaml for a full example):
 
-    Fields:
+    Fields (path fields may reference environment variables, e.g. model_dir: "$DATA/models"):
         init_configs_fpath:   # optional starting-config file (e.g. a solvated config), read as
                               # relative to data_dir when it does not resolve from the cwd; when
                               # unset, each model's optimised TS in out/opt is used.
@@ -102,6 +102,8 @@ if __name__ == "__main__":
                               # (defaults to DATA_DIR in settings).
         out_dir:              # output root; trajectories are written to <out_dir>/trj
                               # (defaults to OUT_DIR in settings).
+        model_dir:            # directory the model_names are loaded from, when they live
+                              # outside the default MODEL_DIR (defaults to MODEL_DIR).
         system_name:          # system name; also prefixes the starting-config filenames.
         include_solvent:      # true: start from in-solvent-optimised TS, false: vacuum TS.
         solvent_name:         # solvent used in the starting-config filenames (include_solvent only).
@@ -174,6 +176,7 @@ if __name__ == "__main__":
     box_dim = resolved["box_dim"]
 
     # === 3. MODELS (model_names list; fine-tuning naming components for ${...} templating) ===
+    model_dir = resolved["model_dir"]
     model_names = resolved["model_names"]
     system_ft_name = resolved["system_ft_name"]
     n = resolved["n"]

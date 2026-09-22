@@ -32,7 +32,8 @@ def mlip_dimer_method(input_config_fp: str,
                       cuda_device: str = 'cuda:0',
                       enable_cueq: bool = False,
                       box_dim: list[int, int, int] = None,
-                      override_cache: bool = False
+                      override_cache: bool = False,
+                      model_dir: str = None
                       ) -> Atoms:
     """
     Runs dimer TS Optimisation method with an MLIP.
@@ -72,7 +73,8 @@ def mlip_dimer_method(input_config_fp: str,
         logger.info(f"Set PBC box dimensions to {box_dim}")
     else:
         logger.info(f"Using input box dimensions of {input_config.cell}")
-    input_config.calc = load_model_calculator(model_name, device=cuda_device, enable_cueq=enable_cueq)
+    input_config.calc = load_model_calculator(model_name, device=cuda_device,
+                                              enable_cueq=enable_cueq, model_dir=model_dir)
     input_config.get_potential_energy()
     input_xyz = input_config.get_positions()
     ref_xyz = input_xyz

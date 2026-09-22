@@ -336,7 +336,8 @@ if __name__ == "__main__":
     inputs/pretrain_bias/CPD_MVK_DA_pretrain_bias.yaml)
 
     Input YAML format (see inputs/pretrain_bias/CPD_MVK_DA_pretrain_bias.yaml for a full
-    example). Fields:
+    example). Path fields may reference environment variables,
+    e.g. model_dir: "$DATA/models". Fields:
 
     Test system:
         test_name:              # test set name (used in output / cache filenames).
@@ -351,6 +352,8 @@ if __name__ == "__main__":
 
     Model / fine-tuning selection:
         model_names:            # list of base (zero-shot) models to analyse.
+        model_dir:              # directory those models are resolved in, when they live
+                                # outside the default MODEL_DIR (defaults to MODEL_DIR).
         model_plt_labels:       # short model labels used in correlation-plot annotations.
         model_ft_n:             # fine-tuning set size (used in plot labels).
         model_full_ft_n:        # full-fine-tuning set size (used in plot labels).
@@ -426,6 +429,7 @@ if __name__ == "__main__":
     input_lot_test_fpaths = resolved["input_lot_test_fpaths"]
 
     # base model / fine-tuning selection
+    model_dir = resolved["model_dir"]
     model_names = resolved["model_names"]
     model_plt_labels = resolved["model_plt_labels"]
     n = resolved["n"]
@@ -505,7 +509,8 @@ if __name__ == "__main__":
         # calc model errors + sort
         all_test_energies, all_test_forces, all_pred_energies_dict, all_pred_forces_dict = get_test_and_pred_data(pred_models,
                                                                                                                    [test_fpath],
-                                                                                                                   cuda_device=cuda_device)
+                                                                                                                   cuda_device=cuda_device,
+                                                                                                                   model_dir=model_dir)
         # energies
         test_energies = np.array([all_test_energies[0][i] for i in test_sorted_indices])       
         zero_shot_pred_energies = np.array([all_pred_energies_dict[model_name][0][i] for i in test_sorted_indices])

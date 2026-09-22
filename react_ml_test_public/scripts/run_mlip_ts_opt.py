@@ -26,7 +26,6 @@ from react_ml_test_public.helpers.settings import (
     ANTHRACENE_DA_DATA_DIR,
     CPD_MVK_DA_DATA_DIR,
     GUAJADIAL_DA_DATA_DIR,
-    MODEL_DIR,
     OPT_DIR,
     PAPER_MODELS,
     PS,
@@ -48,7 +47,7 @@ if __name__ == "__main__":
 
     Input YAML format (see inputs/ts/CPD_MVK_DA_ts_opt_vac.yaml for a full example):
 
-    Fields:
+    Fields (path fields may reference environment variables, e.g. model_dir: "$DATA/models"):
         save_name:              # base name used in all output files.
         react_coords:           # reactive atom pairs [(i, j), ...] defining the reaction coordinate.
         num_solute_atoms:       # number of solute atoms (leading atoms of each config).
@@ -74,6 +73,8 @@ if __name__ == "__main__":
         solv_shell_cutoff:      # solvent-shell cutoff for the frozen-solvent TS optimisation.
 
         out_dir:                # output directory (defaults to OPT_DIR in settings).
+        model_dir:              # directory the model_names are loaded from, when they live
+                                # outside the default MODEL_DIR (defaults to MODEL_DIR).
         fmax:                   # optimisation convergence threshold / eV A^-1.
         displace_mag:           # initial displacement along the reaction coordinate / A.
         enable_cueq:            # use the cuEquivariance MACE speed-up (CUDA 12+).
@@ -109,6 +110,7 @@ if __name__ == "__main__":
     reverse_displace = resolved["reverse_displace"]
 
     # === 2. MODEL SELECTION ===
+    model_dir = resolved["model_dir"]
     model_names = resolved["model_names"]
     system_ft_name = resolved["system_ft_name"]
     n = resolved["n"]
@@ -161,13 +163,15 @@ if __name__ == "__main__":
                                           cuda_device=cuda_device,
                                           enable_cueq=enable_cueq,
                                           box_dim=box_dim,
-                                          override_cache=override_cache)
+                                          override_cache=override_cache,
+                                          model_dir=model_dir)
         opt_ts_config_fp = f'{out_dir}/{fmt_save_name}_{model_name}_opt_TS.xyz'
         logger.info(f'Ran {model_name} dimer method in {time.time() - start_time:.4f}s...')
 
         # confirm MLIP Vibrational frequencies, only in vacuum
         logger.info(f'Calculating Vibrational Freq. on OPT TS with {model_name}...')
-        calc = load_model_calculator(model_name, device=cuda_device, enable_cueq=enable_cueq)
+        calc = load_model_calculator(model_name, device=cuda_device, enable_cueq=enable_cueq,
+                                     model_dir=model_dir)
         get_vib_freq(opt_ts_config_fp,
                      calc,
                      f"{fmt_save_name}_{model_name}",
@@ -201,7 +205,7 @@ if __name__ == "__main__":
             md_config = MDSettings(fs=eq_time, temp=300, dt=0.5, interval=100, md_method='ase')
             solute_indices = set(range(num_solute_atoms))
             solvated_config_ase.set_constraint(FixAtoms(mask=[i in solute_indices for i in range(len(solvated_config_ase))]))
-            solv_eq_trj = get_trajectory_with_ase(solvated_config_ase, model_name, md_config, f"{save_name}_{model_name}_solv_eq", out_dir=out_dir, cuda_device=cuda_device)
+            solv_eq_trj = get_trajectory_with_ase(solvated_config_ase, model_name, md_config, f"{save_name}_{model_name}_solv_eq", out_dir=out_dir, cuda_device=cuda_device, model_dir=model_dir)
             logger.info(f'Ran {model_name} {eq_time} solvent equilibration in {time.time() - start_time:.4f}s...')
 
             # save energy plot to confirm equilibration
@@ -234,7 +238,8 @@ if __name__ == "__main__":
                                                    cuda_device=cuda_device,
                                                    enable_cueq=enable_cueq,
                                                    box_dim=box_dim,
-                                                   override_cache=True)
+                                                   override_cache=True,
+                                                   model_dir=model_dir)
             logger.info(f'Ran {model_name} solvated dimer method in {time.time() - start_time:.4f}s...')
 
     logger.info('Finished running all models...')
