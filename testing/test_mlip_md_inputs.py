@@ -3,7 +3,8 @@ Unit tests for the run_mlip_md.py input YAML resolution.
 
 These cover the ``data_dir`` / ``out_dir`` fields and the optional ``init_configs_fpath``
 starting-config file: a relative ``init_configs_fpath`` is taken as relative to ``data_dir``,
-and trajectories are written under ``<out_dir>/trj``.
+trajectories are written under ``<out_dir>/trj`` and the MD benchmark CSVs under
+``<out_dir>/csv``.
 
 Nothing here needs a GPU, the MACE stack or any model files.
 
@@ -18,9 +19,11 @@ import pytest
 
 from react_ml_test_public.helpers import inputs as rmlt_inputs
 from react_ml_test_public.helpers.settings import (
+    CSV_DIR,
     DATA_DIR,
     OUT_DIR,
     TRAJ_DIR,
+    resolve_csv_dir,
     resolve_traj_dir,
 )
 
@@ -70,6 +73,15 @@ class TestResolveTrajDir:
         assert resolve_traj_dir("somewhere/else") == "somewhere/else/trj"
 
 
+class TestResolveCsvDir:
+
+    def test_defaults_come_from_settings(self):
+        assert resolve_csv_dir() == CSV_DIR
+
+    def test_override(self):
+        assert resolve_csv_dir("somewhere/else") == "somewhere/else/csv"
+
+
 class TestMlipMdYaml:
 
     def test_dirs_default_to_settings_and_no_init_configs(self, tmp_path):
@@ -79,6 +91,7 @@ class TestMlipMdYaml:
         assert resolved["data_dir"] == DATA_DIR
         assert resolved["out_dir"] == OUT_DIR
         assert resolved["traj_dir"] == TRAJ_DIR
+        assert resolved["csv_dir"] == CSV_DIR
         # unset: the script falls back to each model's optimised TS in out/opt
         assert resolved["init_configs_fpath"] is None
 
@@ -98,6 +111,7 @@ init_configs_fpath: "pbc/config.xyz"
         assert resolved["data_dir"] == f"{tmp_path}/data"
         assert resolved["out_dir"] == f"{tmp_path}/out"
         assert resolved["traj_dir"] == f"{tmp_path}/out/trj"
+        assert resolved["csv_dir"] == f"{tmp_path}/out/csv"
         assert resolved["init_configs_fpath"] == f"{tmp_path}/data/pbc/config.xyz"
 
     def test_init_configs_fpath_templates_from_data_dir(self, tmp_path):

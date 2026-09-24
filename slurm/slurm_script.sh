@@ -9,6 +9,11 @@
 #SBATCH --gres=gpu:1
 # --constraint=gpu_sku:H100
 
+# ===== CONDA ENVIRONMENT =====
+# The conda env the job runs in - edit this line, e.g. "$DATA/mlptrain-mace" for
+# mlptrain / autode jobs.
+RMLT_CONDA_ENV="$DATA/latest_mace"
+
 # Generic submission script: runs any `rmlt` workflow script on the compute node.
 #
 # Submit through the rmlt command (recommended - it checks the script name and finds
@@ -42,14 +47,8 @@ if [ "$#" -lt 2 ]; then
     exit 2
 fi
 
-# load the conda env that has rmlt installed. Both steps are guarded so that the script
-# is also runnable off-cluster (used by the tests, and handy for a local test).
-if command -v module >/dev/null 2>&1; then
-    module load Anaconda3
-fi
-if [ -n "${DATA:-}" ]; then
-    source activate "$DATA/latest_mace"
-fi
+module load Anaconda3
+source activate "$RMLT_CONDA_ENV"
 
 unset PYTORCH_CUDA_ALLOC_CONF
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128

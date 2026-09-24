@@ -13,9 +13,10 @@ from ase.constraints import FixAtoms
 from ase.io import read
 
 from react_ml_test_public.helpers import inputs as rmlt_inputs
-from react_ml_test_public.helpers.dynamics import get_trajectory_with_ase
+from react_ml_test_public.helpers.dynamics import get_trajectory_with_ase, save_md_run_csv
 from react_ml_test_public.helpers.io import (
     check_cuda_setup,
+    compute_device_label,
     get_name_from_path,
     load_model_calculator,
 )
@@ -32,6 +33,10 @@ from react_ml_test_public.helpers.settings import (
     MDSettings,
 )
 
+# the MD engine the trajectories below are run with: get_trajectory_with_ase, i.e. ASE. Only
+# ASE is wired up here, so this is also what the benchmark CSVs record as the calculator.
+MD_CALCULATOR = 'ASE'
+
 
 def run_md_eval(init_configs: list,
                 md_config: MDSettings,
@@ -40,17 +45,32 @@ def run_md_eval(init_configs: list,
                 formatted_model_name: str,
                 system_name: str,
                 traj_dir: str = TRAJ_DIR,
+                csv_dir: str = None,
+                model_dir: str = None,
                 constraint: str = None,# IndexedConstraint = None,
                 enable_cueq: bool = False,
                 override_saved: bool = False,
-                cuda_device: str = "cuda:0"):
+                cuda_device: str = "cuda:0",
+                device_label: str = None):
+
+    """Run every MD trajectory for one model, and write a benchmark CSV for each of them.
+
+    With ``csv_dir`` set, one CSV per run is saved under ``<csv_dir>/md`` (see
+    ``save_md_run_csv``): the device the run used, the calculator, the wall time of every
+    step, the mean step time, and the step count / simulated time / overall run time.
+    ``device_label`` names that device in the CSV and defaults to the name of the resolved
+    ``cuda_device`` (see ``compute_device_label``). ``enable_cueq`` and ``model_dir`` are
+    forwarded to every run's calculator.
+    """
+
+    # the CSV records the device by name (e.g. 'NVIDIA H100 80GB HBM3'), once for the run
+    if csv_dir is not None and device_label is None:
+        device_label = compute_device_label(cuda_device)
 
     trajectories = []
     for i in range(len(init_configs)):
 
         init_config = init_configs[i].copy()
-
-        # calc = load_model_calculator(model_name, device=CUDA_DEVICE, enable_cueq=enable_cueq, dtype='float32')
 
         for j in range(md_runs_per_config):
             logger.info(f"Running MD trajectory for init config {i + 1}, run number {j}...")
@@ -63,6 +83,8 @@ def run_md_eval(init_configs: list,
                 logger.info(f"{out_trj_name} already exists, skipping...")
                 continue
 
+            step_times = [] if csv_dir is not None else None
+
             trajectory = get_trajectory_with_ase(init_config,
                                                  model_name,
                                                  md_config,
@@ -71,11 +93,24 @@ def run_md_eval(init_configs: list,
                                                  constraint=constraint,
                                                  cuda_device=cuda_device,
                                                  override_cache=override_saved,
-                                                 model_dir=model_dir)
+                                                 model_dir=model_dir,
+                                                 enable_cueq=enable_cueq,
+                                                 step_times=step_times)
             end_time = time()
             md_time = end_time - start_time
             steps = float(md_config.fs / md_config.dt)
             logger.info(f"Ran MD trajectory '{traj_name}' in {md_time:.4f}s, with an average step time of {float(md_time) / steps}...")
+
+            # the step times are only recorded for a run that actually ran, so an empty list
+            # means the trajectory was reused and there is nothing to benchmark
+            if step_times:
+                save_md_run_csv(f"{csv_dir}/md/{traj_name}.csv",
+                                step_times,
+                                md_config.dt,
+                                md_time,
+                                device=device_label,
+                                calculator=MD_CALCULATOR)
+
             trajectories.append(trajectory)
 
     return trajectories
@@ -100,8 +135,9 @@ if __name__ == "__main__":
                               # unset, each model's optimised TS in out/opt is used.
         data_dir:             # data root that a relative init_configs_fpath resolves against
                               # (defaults to DATA_DIR in settings).
-        out_dir:              # output root; trajectories are written to <out_dir>/trj
-                              # (defaults to OUT_DIR in settings).
+        out_dir:              # output root; trajectories are written to <out_dir>/trj and one
+                              # MD benchmark CSV per run to <out_dir>/csv/md (defaults to
+                              # OUT_DIR in settings).
         model_dir:            # directory the model_names are loaded from, when they live
                               # outside the default MODEL_DIR (defaults to MODEL_DIR).
         system_name:          # system name; also prefixes the starting-config filenames.
@@ -126,10 +162,16 @@ if __name__ == "__main__":
         omol_rep_num:         # OMOL model repetition number.
         omol_energy_str:      # OMOL energy suffix/prefix string.
 
-        enable_cueq:          # use the cuEquivariance MACE speed-up (CUDA 12+).
+        enable_cueq:          # use the cuEquivariance MACE speed-up (needs a CUDA GPU and
+                              # mace-torch's cueq extras).
         override_saved:       # re-run MD even if a saved trajectory already exists.
         cuda_device:          # GPU device for the MLIP calculators (default "cuda:0",
                               # falls back to "cpu" if that device is not found).
+
+    Alongside each trajectory, a CSV of the run's performance is written to <out_dir>/csv/md
+    (one per MD run, named after the trajectory): the compute device, the calculator, the wall
+    time of every step, the mean step time, the number of steps run, the simulated time they
+    amount to and the overall run time (see helpers.dynamics.save_md_run_csv).
 
     formatted_model_names are built in the script: fine-tuned entries of this training set get
     a compact "<label>_<system_ft_name>_<n>_config_<energy><sample_str>ft" label, other entries
@@ -161,6 +203,7 @@ if __name__ == "__main__":
     data_dir = resolved["data_dir"]
     out_dir = resolved["out_dir"]
     traj_dir = resolved["traj_dir"]
+    csv_dir = resolved["csv_dir"]
     system_name = resolved["system_name"]
     include_solvent = resolved["include_solvent"]
     solvent_name = resolved["solvent_name"]
@@ -195,6 +238,9 @@ if __name__ == "__main__":
     # resolve the requested device (i.e. fall back to 'cpu' if the GPU is not available)
     cuda_device = check_cuda_setup(cuda_device)
 
+    # the MD benchmark CSVs go under <csv_dir>/md, one per run (see run_md_eval)
+    md_csv_dir = f"{csv_dir}/md"
+
     md_config = MDSettings(fs=fs, temp=temp, dt=dt, interval=interval, md_method=md_method)
 
     # formatted labels for trajectory names: fine-tuned entries -> compact label, else model name
@@ -216,6 +262,8 @@ if __name__ == "__main__":
     logger.info(f"Reading configs relative to data_dir: {data_dir}, "
                 f"writing trajectories under out_dir: {out_dir} (i.e. {traj_dir})")
     os.makedirs(traj_dir, exist_ok=True)
+    # one benchmark CSV per run is written here (see run_md_eval)
+    os.makedirs(md_csv_dir, exist_ok=True)
 
     if init_configs_fpath is None:
         if include_solvent:
@@ -255,6 +303,8 @@ if __name__ == "__main__":
                                    formatted_model_name,
                                    formatted_system_name,
                                    traj_dir=traj_dir,
+                                   csv_dir=csv_dir,
+                                   model_dir=model_dir,
                                    constraint=constraint,
                                    enable_cueq=enable_cueq,
                                    override_saved=override_saved,

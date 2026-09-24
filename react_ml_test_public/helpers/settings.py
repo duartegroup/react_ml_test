@@ -188,6 +188,20 @@ def resolve_traj_dir(out_dir: str = None) -> str:
     return f"{resolve_out_root(out_dir)}/trj"
 
 
+def resolve_csv_dir(out_dir: str = None) -> str:
+    """
+    Resolve the CSV output directory under an output root directory.
+
+    CSVs go under ``<out_dir>/csv`` - matching the ``CSV_DIR`` layout the default ``OUT_DIR``
+    gives - so a YAML that sets ``out_dir`` (e.g. for run_mlip_md.py) writes them alongside
+    the rest of that run's outputs (see ``resolve_out_root``).
+
+    :param out_dir: output root directory, or None to use OUT_DIR.
+    :return: the CSV output directory.
+    """
+    return f"{resolve_out_root(out_dir)}/csv"
+
+
 def resolve_data_path(fpath: str, data_dir: str = None) -> str:
     """
     Resolve a YAML input's data path against a data root directory.

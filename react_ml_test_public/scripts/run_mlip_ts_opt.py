@@ -77,7 +77,8 @@ if __name__ == "__main__":
                                 # outside the default MODEL_DIR (defaults to MODEL_DIR).
         fmax:                   # optimisation convergence threshold / eV A^-1.
         displace_mag:           # initial displacement along the reaction coordinate / A.
-        enable_cueq:            # use the cuEquivariance MACE speed-up (CUDA 12+).
+        enable_cueq:            # use the cuEquivariance MACE speed-up (needs a CUDA GPU and
+                                # mace-torch's cueq extras).
         override_cache:         # re-run even if an optimised TS already exists.
         cuda_device:            # GPU device for the MLIP calculators (default "cuda:0",
                                 # falls back to "cpu" if that device is not found).
@@ -205,7 +206,14 @@ if __name__ == "__main__":
             md_config = MDSettings(fs=eq_time, temp=300, dt=0.5, interval=100, md_method='ase')
             solute_indices = set(range(num_solute_atoms))
             solvated_config_ase.set_constraint(FixAtoms(mask=[i in solute_indices for i in range(len(solvated_config_ase))]))
-            solv_eq_trj = get_trajectory_with_ase(solvated_config_ase, model_name, md_config, f"{save_name}_{model_name}_solv_eq", out_dir=out_dir, cuda_device=cuda_device, model_dir=model_dir)
+            solv_eq_trj = get_trajectory_with_ase(solvated_config_ase,
+                                                  model_name,
+                                                  md_config,
+                                                  f"{save_name}_{model_name}_solv_eq",
+                                                  out_dir=out_dir,
+                                                  cuda_device=cuda_device,
+                                                  model_dir=model_dir,
+                                                  enable_cueq=enable_cueq)
             logger.info(f'Ran {model_name} {eq_time} solvent equilibration in {time.time() - start_time:.4f}s...')
 
             # save energy plot to confirm equilibration

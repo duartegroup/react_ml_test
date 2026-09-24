@@ -45,6 +45,7 @@ from react_ml_test_public.helpers.settings import (
     PAPER_MODEL_COLOURS,
     TRAJ_DIR,
     expand_env_vars,
+    resolve_csv_dir,
     resolve_data_path,
     resolve_model_dir,
     resolve_out_dirs,
@@ -610,8 +611,9 @@ def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
     Data / output directories may be set per-YAML with the optional ``data_dir`` and ``out_dir``
     fields, which default to ``DATA_DIR`` / ``OUT_DIR`` from settings.py. A relative
     ``init_configs_fpath`` that does not resolve from the current working directory is taken to
-    be relative to ``data_dir``, and trajectories are written under ``out_dir`` (see
-    ``resolve_traj_dir``, i.e. ``<out_dir>/trj``).
+    be relative to ``data_dir``, trajectories are written under ``out_dir`` (see
+    ``resolve_traj_dir``, i.e. ``<out_dir>/trj``) and the per-run MD benchmark CSVs under it
+    too (see ``resolve_csv_dir``, i.e. ``<out_dir>/csv``).
     """
     input_config = _load_yaml_config(input_yaml_fpath, parser)
 
@@ -638,6 +640,7 @@ def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
     data_dir = input_config.get("data_dir", DATA_DIR)
     out_dir = resolve_out_root(input_config.get("out_dir", OUT_DIR))
     traj_dir = resolve_traj_dir(out_dir)
+    csv_dir = resolve_csv_dir(out_dir)
     model_dir = resolve_model_dir(input_config.get("model_dir", None))
 
     # ===== system / starting configs =====
@@ -692,6 +695,7 @@ def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
         "data_dir": data_dir,
         "out_dir": out_dir,
         "traj_dir": traj_dir,
+        "csv_dir": csv_dir,
         "init_configs_fpath": init_configs_fpath,
         "system_name": system_name,
         "include_solvent": include_solvent,

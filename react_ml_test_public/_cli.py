@@ -31,8 +31,9 @@ import sys
 _SCRIPTS_PKG = "react_ml_test_public.scripts"
 
 # The generic submission script `rmlt slurm` hands to sbatch. Its '#SBATCH' lines hold
-# the resources for the job, so it is meant to be edited by hand (see slurm/eg.sh).
-_DEFAULT_SLURM_SCRIPT = os.path.join("slurm", "eg.sh")
+# the resources for the job, so it is meant to be edited by hand
+# (see slurm/slurm_script.sh).
+_DEFAULT_SLURM_SCRIPT = os.path.join("slurm", "slurm_script.sh")
 
 _SLURM_USAGE = (
     "Usage: rmlt slurm [sbatch options] [<slurm-script.sh>] <script> <input.yaml> [args...]"
@@ -109,7 +110,7 @@ def _print_slurm_help(stream=None) -> None:
     print("and is equivalent to `sbatch <slurm-script.sh> <script> <input.yaml>`.", file=stream)
     print(file=stream)
     print("Options:", file=stream)
-    print("  --script PATH   slurm script to submit (default: slurm/eg.sh). A leading",
+    print(f"  --script PATH   slurm script to submit (default: {_DEFAULT_SLURM_SCRIPT}). A leading",
           file=stream)
     print("                  argument ending in .sh is also taken as the script path.",
           file=stream)
@@ -264,8 +265,8 @@ def _run_slurm(args: list[str]) -> int:
         return 0
 
     # every workflow script so far takes its input YAML as a single positional argument,
-    # and slurm/eg.sh requires exactly that shape, so catch a missing input here rather
-    # than in a job that dies seconds after it starts
+    # and the slurm script requires exactly that shape, so catch a missing input here
+    # rather than in a job that dies seconds after it starts
     if len(workflow) < 2:
         print(f"rmlt slurm: no input file given for '{workflow[0]}'", file=sys.stderr)
         print(_SLURM_USAGE, file=sys.stderr)
@@ -273,7 +274,7 @@ def _run_slurm(args: list[str]) -> int:
 
     slurm_script = options["script"] or _DEFAULT_SLURM_SCRIPT
     if not os.path.isfile(slurm_script) and not os.path.dirname(slurm_script):
-        # a bare name like `eg.sh` means the one in slurm/ - the command echoed below
+        # a bare name like `other.sh` means the one in slurm/ - the command echoed below
         # always shows the path that was actually used
         candidate = os.path.join(os.path.dirname(_DEFAULT_SLURM_SCRIPT), slurm_script)
         if os.path.isfile(candidate):

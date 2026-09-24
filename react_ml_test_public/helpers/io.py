@@ -534,6 +534,33 @@ def check_cuda_setup(cuda_device: str = "cuda:0") -> str:
     return resolved_device
 
 
+def compute_device_label(device: str) -> str:
+    """Describe a resolved compute device by name, for reporting e.g. in a benchmark CSV.
+
+    A resolved 'cpu' device is reported as 'CPU' and a 'cuda:N' one as the model name torch
+    reports for that GPU (e.g. 'NVIDIA H100 80GB HBM3'), which is what makes two runs on
+    different hardware comparable. Any other device string is returned as it is.
+
+    ``device`` is expected to be already resolved (see ``resolve_cuda_device``), so it is
+    'cpu' or a 'cuda:N' that exists on this machine. ``torch`` is imported lazily so that
+    importing this module does not pull in the PyTorch stack.
+
+    :param device: a resolved device string, e.g. 'cpu' or 'cuda:0'.
+    :return: the device name to record.
+    """
+    device = str(device).strip()
+    if device == "cpu":
+        return "CPU"
+    if not device.startswith("cuda"):
+        return device
+
+    import torch
+
+    # 'cuda' on its own means device 0 (see resolve_cuda_device, which normalises it)
+    index = int(device.split(":")[1]) if ":" in device else 0
+    return torch.cuda.get_device_name(index)
+
+
 @contextmanager
 def _jit_load_on_device(device: str):
     """Force ``torch.jit.load`` onto ``device`` for the duration of the block.
@@ -568,6 +595,36 @@ def _jit_load_on_device(device: str):
         torch.jit.load = original_jit_load
 
 
+def _cueq_setup_hint() -> str:
+    """Say what cuEquivariance needs that this environment does not have.
+
+    A cueq load failure is nearly always its extras being missing or out of step with the
+    installed mace-torch, which the error raised from inside cuequivariance does not say, so
+    the versions on both sides are reported. Used only on that failure path, and returns an
+    empty string if either side cannot be read, so a failure here never hides the original
+    error.
+    """
+    try:
+        from importlib.metadata import PackageNotFoundError, requires, version
+
+        # mace-torch declares its cueq requirement on the 'cueq' extra, e.g.
+        # 'cuequivariance-torch>=0.2.0; extra == "cueq"'
+        wants = [requirement.split(";")[0].strip()
+                 for requirement in requires("mace-torch") or []
+                 if requirement.split()[0].lower().startswith("cuequivariance-torch")]
+        want = f"mace-torch asks for {wants[0]};" if wants else ""
+        try:
+            have = f"installed cuequivariance-torch is {version('cuequivariance-torch')}."
+        except PackageNotFoundError:
+            have = "cuequivariance-torch is not installed."
+    except Exception:
+        return ""
+
+    return (f"cuEquivariance needs mace-torch's cueq extras installed, matching the mace "
+            f"version and this machine's CUDA build ({want} {have}) and a CUDA GPU - fix the "
+            f"extras, or set enable_cueq: false to run without the acceleration.")
+
+
 def load_model_calculator(model_name: str,
                           device='cuda:0',
                           model_loader: Literal['MACE', 'ani', 'graph-pes'] = None,
@@ -589,6 +646,12 @@ def load_model_calculator(model_name: str,
     ``model_dir`` defaults to ``MODEL_DIR`` (see ``resolve_model_dir``), which a YAML
     input can override with its ``model_dir`` field to load models from another
     repository's ``models/`` directory.
+
+    ``enable_cueq`` asks for the cuEquivariance acceleration, which needs its extras
+    installed - matching the mace version and this machine's CUDA build - and a GPU. It is
+    deliberately not a best-effort setting: if it is asked for and cannot be set up, the
+    model is not loaded (a warning spells out what cueq needs, see ``_cueq_setup_hint``)
+    rather than quietly running unaccelerated.
     """
 
     # resolve the requested device before building any calculator
@@ -629,12 +692,30 @@ def load_model_calculator(model_name: str,
                 # mace model loader (imported lazily to keep io.py importable without MACE)
                 from mace.calculators import MACECalculator
 
-                return MACECalculator(model_paths=model_fpath,
-                                      device=device,
-                                      enable_cueq=enable_cueq,
-                                      default_dtype=dtype,
-                                      head=head
-                                    )
+                def _mace_calculator(use_cueq: bool):
+                    return MACECalculator(model_paths=model_fpath,
+                                          device=device,
+                                          enable_cueq=use_cueq,
+                                          default_dtype=dtype,
+                                          head=head
+                                          )
+
+                try:
+                    return _mace_calculator(enable_cueq)
+
+                except Exception as e:
+                    # a plain load failure is reported by the handler below; one where
+                    # cuEquivariance was asked for gets the likely cause spelled out, as the
+                    # bare error (typically a version mismatch deep inside cuequivariance)
+                    # does not say that the acceleration is what could not be set up
+                    if not enable_cueq:
+                        raise
+
+                    logger.warning(f"{model_name} could not be loaded with cuEquivariance "
+                                   f"acceleration, which enable_cueq=True asked for, because of "
+                                   f"error: \n{e} \n{_cueq_setup_hint()} \n... Returning None "
+                                   f"for calc instead...")
+                    return None
 
             elif model_loader == ANI_MODEL_LOADER:
 

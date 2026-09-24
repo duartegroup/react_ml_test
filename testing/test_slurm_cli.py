@@ -7,12 +7,15 @@ These cover:
     (``_cli._split_slurm_args`` / ``_cli._run_slurm``),
   * the sbatch command that gets built, and the errors reported before anything is
     submitted,
-  * the slurm script itself (``slurm/eg.sh``): its syntax, its usage guard, that it runs
-    from the submitting directory, and that it forwards its arguments to ``rmlt`` intact.
+  * the slurm script itself (``slurm/slurm_script.sh``): its syntax, its usage guard, that
+    it runs from the submitting directory, and that it forwards its arguments to ``rmlt``
+    intact.
 
 Nothing here submits a job, needs a GPU, or needs ``sbatch``: the command is inspected
-with ``--dry-run`` or a monkeypatched ``subprocess.run``, and ``slurm/eg.sh`` is run for
-real against a stub ``rmlt`` (its environment setup is guarded so that works off-cluster).
+with ``--dry-run`` or a monkeypatched ``subprocess.run``, and ``slurm/slurm_script.sh`` is
+run for real against a stub ``rmlt``. The script itself assumes a cluster (it loads
+``module`` and activates a conda env); neither is present when these tests run it, which
+must not abort the job.
 
 Run from the repository root:
 
@@ -29,14 +32,14 @@ import pytest
 from react_ml_test_public import _cli
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SLURM_SCRIPT = REPO_ROOT / "slurm" / "eg.sh"
+SLURM_SCRIPT = REPO_ROOT / "slurm" / "slurm_script.sh"
 
 MD_YAML = "inputs/md/CPD_MVK_DA_dynamics_vac.yaml"
 
 
 @pytest.fixture(autouse=True)
 def _run_from_repo_root(monkeypatch):
-    """Resolve the repo-root-relative paths (slurm/eg.sh, inputs/...) used here."""
+    """Resolve the repo-root-relative paths (slurm/slurm_script.sh, inputs/...) used here."""
     monkeypatch.chdir(REPO_ROOT)
 
 
@@ -86,8 +89,10 @@ class TestSplitSlurmArgs:
         assert workflow == [token, MD_YAML]
 
     def test_leading_shell_script_is_taken_as_the_slurm_script(self):
-        options, sbatch_options, workflow = _cli._split_slurm_args(["eg.sh", "run-mlip-md", MD_YAML])
-        assert options["script"] == "eg.sh"
+        options, sbatch_options, workflow = _cli._split_slurm_args(
+            ["slurm_script.sh", "run-mlip-md", MD_YAML]
+        )
+        assert options["script"] == "slurm_script.sh"
         assert sbatch_options == []
         assert workflow == ["run-mlip-md", MD_YAML]
 
@@ -135,7 +140,7 @@ class TestSlurmCommand:
         assert _cli.main(["slurm", "--dry-run", "run-mlip-md", MD_YAML]) == 0
 
         out = capsys.readouterr().out.splitlines()
-        assert out[0] == f"sbatch slurm/eg.sh run-mlip-md {MD_YAML}"
+        assert out[0] == f"sbatch slurm/slurm_script.sh run-mlip-md {MD_YAML}"
 
     def test_dry_run_reports_the_resources_the_script_requests(self, capsys):
         assert _cli.main(["slurm", "-n", "run-mlip-md", MD_YAML]) == 0
@@ -150,13 +155,15 @@ class TestSlurmCommand:
         assert _cli.main(["slurm", "--time=12:00:00", "--gres=gpu:1", "run-mlip-md", MD_YAML]) == 0
 
         assert submit_spy.commands == [
-            ["sbatch", "--time=12:00:00", "--gres=gpu:1", "slurm/eg.sh", "run-mlip-md", MD_YAML]
+            ["sbatch", "--time=12:00:00", "--gres=gpu:1", "slurm/slurm_script.sh",
+             "run-mlip-md", MD_YAML]
         ]
 
     def test_bare_script_name_resolves_into_slurm_dir(self, capsys):
-        assert _cli.main(["slurm", "-n", "eg.sh", "run-mlip-md", MD_YAML]) == 0
+        assert _cli.main(["slurm", "-n", "slurm_script.sh", "run-mlip-md", MD_YAML]) == 0
 
-        assert capsys.readouterr().out.splitlines()[0] == f"sbatch slurm/eg.sh run-mlip-md {MD_YAML}"
+        assert capsys.readouterr().out.splitlines()[0] == (
+            f"sbatch slurm/slurm_script.sh run-mlip-md {MD_YAML}")
 
     def test_script_path_is_quoted_when_it_needs_to_be(self, submit_spy, capsys):
         """The echoed command should be copy-pasteable, so paths go through shlex.join."""
@@ -229,7 +236,7 @@ class TestSbatchDirectives:
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="bash is not available")
 class TestSlurmScript:
-    """slurm/eg.sh run for real, against a stub `rmlt`."""
+    """slurm/slurm_script.sh run for real, against a stub `rmlt`."""
 
     @pytest.fixture
     def stub_rmlt(self, tmp_path):
@@ -248,7 +255,7 @@ class TestSlurmScript:
 
     @staticmethod
     def _run(args, bindir, cwd=REPO_ROOT, submit_dir=None):
-        """Run slurm/eg.sh with the stub rmlt first on PATH and no cluster environment."""
+        """Run slurm/slurm_script.sh with the stub rmlt first on PATH and no $DATA."""
         env = {key: value for key, value in os.environ.items() if key != "DATA"}
         env.pop("SLURM_JOB_ID", None)
         env["PATH"] = f"{bindir}{os.pathsep}{env['PATH']}"
@@ -297,8 +304,10 @@ class TestSlurmScript:
         assert result.returncode == 0, result.stderr
         assert Path(cwd_record.read_text().strip()) == submit_dir
 
-    def test_no_cluster_environment_is_tolerated(self, stub_rmlt):
-        """No `module`, no $DATA, no scontrol, no SLURM_* - still runs (used by these tests)."""
+    def test_absent_cluster_setup_does_not_abort_the_job(self, stub_rmlt):
+        """The script assumes cluster tooling (`module`, a conda env on $DATA) and this
+        harness has neither, so those setup steps must fail harmlessly, not kill the job -
+        the rest of this class runs the script the same way."""
         bindir, _, _ = stub_rmlt
         result = self._run(["run-mlip-md", MD_YAML], bindir)
 

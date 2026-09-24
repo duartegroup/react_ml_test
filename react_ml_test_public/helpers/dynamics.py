@@ -1,12 +1,15 @@
 """
 Helpers for running dynamics with MLIPs.
 """
+import csv
 import os
+from time import time
+
 from ase import units
 from ase.md.langevin import Langevin
 from ase.io import read
 import ase
-from react_ml_test_public.helpers.settings import MDSettings, TRAJ_DIR
+from react_ml_test_public.helpers.settings import MDSettings, PS, TRAJ_DIR
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.io import load_model_calculator
 
@@ -19,12 +22,19 @@ def get_trajectory_with_ase(init_config: ase.Atoms,
                             constraint: str = None, # IndexedConstraint = None,
                             cuda_device: str = "cuda:0",  # falls back to 'cpu' if unavailable
                             override_cache: bool = False,
-                            model_dir: str = None):
+                            model_dir: str = None,
+                            enable_cueq: bool = False,
+                            step_times: list = None):
     """
 
     :param init_config_fp:
     :param model_fp:
     :param output_name:
+    :param enable_cueq: use the cuEquivariance MACE speed-up for the calculator (needs a CUDA
+                        GPU and mace-torch's cueq extras).
+    :param step_times: optional list to append the wall time (s) of every MD step to, for
+                       benchmarking (see save_md_run_csv). A run that returns an existing
+                       trajectory without taking any steps leaves it empty.
     :return:
     """
     traj_fp = f"{out_dir}/{output_name}_traj.xyz"
@@ -46,7 +56,7 @@ def get_trajectory_with_ase(init_config: ase.Atoms,
 
     # load calculator (model_dir None -> MODEL_DIR, see resolve_model_dir)
     calc = load_model_calculator(model_name, device=cuda_device, dtype='float32',
-                                 model_dir=model_dir)
+                                 model_dir=model_dir, enable_cueq=enable_cueq)
 
     # make copy of init config
     init_config = init_config.copy()
@@ -64,7 +74,26 @@ def get_trajectory_with_ase(init_config: ase.Atoms,
         friction=0.02 #/ units.fs # currently using mlptrain standard, ,
     )
 
-    # 3. attach a callback to periodically write the trajectory to a file
+    # 3. time every step, for the benchmark CSV (attached before the writer below, so a
+    # step's time is the step itself plus the trajectory write of the previous one)
+    if step_times is not None:
+        last_call = time()
+        stepping = False
+
+        def _record_step_time():
+            nonlocal last_call, stepping
+            call_time = time()
+            # ASE calls its observers once before the first step (writing the initial
+            # frame), so the first call only sets the baseline - every call after it
+            # closes one step
+            if stepping:
+                step_times.append(call_time - last_call)
+            stepping = True
+            last_call = call_time
+
+        dynamics.attach(_record_step_time, interval=1)
+
+    # 4. attach a callback to periodically write the trajectory to a file
     dynamics.attach(
         lambda: init_config.write(traj_fp, format='extxyz', append=True),
         interval=interval,
@@ -75,6 +104,64 @@ def get_trajectory_with_ase(init_config: ase.Atoms,
     dynamics.run(steps=fs)
 
     return read(traj_fp, index=":")
+
+
+def save_md_run_csv(csv_fpath: str,
+                    step_times: list,
+                    dt: float,
+                    run_time_s: float,
+                    device: str,
+                    calculator: str = "ASE"):
+    """
+    Save the benchmark results of one MD run to a CSV.
+
+    The file holds the run's identity (device, calculator) first, then the wall time of
+    every MD step in order, then the summary values::
+
+        device,NVIDIA H100 80GB HBM3
+        calculator,ASE
+        step,step_time_s
+        0,0.015400
+        ...
+        999,0.011000
+        mean_step_time_s,0.011300
+        total_steps,1000
+        total_simulation_time_ps,0.5000
+        total_run_time_s,12.400
+
+    The times are microseconds-resolution seconds, so a fast step is not rounded away.
+
+    Note that the simulated time comes from the steps actually taken and the time step, as
+    ASE runs ``fs`` steps rather than ``fs / dt`` - it is therefore not the ``fs / PS``
+    figure the trajectory name carries.
+
+    :param csv_fpath: path of the CSV to write (its directory must exist).
+    :param step_times: wall time (s) of every step taken, in order.
+    :param dt: integration time step (fs).
+    :param run_time_s: overall wall time (s) of the run, including loading the model.
+    :param device: compute device the run used, e.g. 'CPU' (see compute_device_label).
+    :param calculator: MD calculator/engine that was used.
+    """
+    total_steps = len(step_times)
+    mean_step_time = sum(step_times) / total_steps if total_steps else 0.0
+
+    with open(csv_fpath, 'w', newline='') as csv_file:
+        writer = csv.writer(csv_file)
+
+        writer.writerow(['device', device])
+        writer.writerow(['calculator', calculator])
+
+        writer.writerow(['step', 'step_time_s'])
+        for step, step_time in enumerate(step_times):
+            writer.writerow([step, f"{step_time:.6f}"])
+
+        writer.writerow(['mean_step_time_s', f"{mean_step_time:.6f}"])
+        writer.writerow(['total_steps', total_steps])
+        # the steps actually taken, at the time step used (fs -> ps)
+        writer.writerow(['total_simulation_time_ps', f"{total_steps * dt / PS:.4f}"])
+        writer.writerow(['total_run_time_s', f"{run_time_s:.3f}"])
+
+    logger.info(f"Saved MD benchmark CSV to {csv_fpath}")
 
 
 def get_trajectory_with_mlptrain(init_config,

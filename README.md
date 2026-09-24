@@ -126,6 +126,8 @@ Then, run: `rmlt run-mlip-md inputs/md/CPD_MVK_DA_dynamics_vac.yaml`.
 
 This will take the output optimised TS in vacuum from 1. and run 10 1ps dynamics runs, with the trajectories output to `out/trj/`.
 
+One CSV of the run's performance is written per MD run to `out/csv/md/`, named after its trajectory: the compute device, the calculator used, the wall time of every step, the mean step time, the number of steps run, the simulated time they amount to and the overall run time. These are what makes two runs (or two machines) comparable.
+
 #### 3. Analysis
 
 To analyse the output trajectories, we then run:
