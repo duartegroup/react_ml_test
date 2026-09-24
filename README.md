@@ -10,7 +10,7 @@ An ORA repository of trained models, data, and other supplementary results can b
    
 2. This repository has dependencies with [mlptrain](https://github.com/duartegroup/mlp-train). Clone `mlptrain` (WARNING: if your local machine does not have a GPU, you will need to modify the `environment_mace.yml` file by removing the last 3 lines for the pip cuequivariance dependencies before running the installation script). Then, run the `./install_mace.sh` script - this provides the conda environment named `mlptrain-mace`. 
 
-Then:
+    Then:
    
    ```bash
    conda activate mlptrain-mace
@@ -18,16 +18,35 @@ Then:
    pip install --upgrade ase
    ```
 
-3. Install the current package into the environment. This provides the `rmlt` command used to run the workflow scripts (see [Running the scripts](#running-the-scripts)). An editable install is recommended while developing (run from within the `react_ml_test/` directory):
+3. Install the current package into the environment (from the repository root: `react_ml_test/`). This provides the `rmlt` command used to run the workflow scripts (see [Running the scripts](#running-the-scripts)). An editable install is recommended while developing (run from within the `react_ml_test/` directory):
    
    ```bash
    pip install -e .
    ```
-   A regular install (`pip install .`) also works, but will ignore future code edits.
 
 Notes:
 - To run the ani-1nxr model, you must have the neurchem project in the parent directory of this repo. You must also then ensure you have the `libcublas.so.9.2` file (from CUDA 9.2) added to the `LD_LIBRARY_PATH`.
 - For some features a specific fork of MACE is required (e.g. train loss logging + patience warmup, please let me know if you need these features!)
+
+### Running with FairChem models
+
+[FairChem](https://fair-chem.github.io) calculators (the `uma-*`, `esen-*` and `allscaip-*` models) can be used anywhere a model name is taken, but FairChem and MACE cannot be installed in the same env, so they must be run in their own conda env:
+
+```bash
+conda create -n fair_chem python=3.14 -c conda-forge
+conda activate fair_chem
+pip install fairchem-core
+pip install -e . --no-deps          # once, from this repository: provides the `rmlt` command
+```
+
+Name a model from `FAIRCHEM_MODELS` in `settings.py` (the names FairChem serves are listed there - models are fetched from FairChem's hub on first use and cached under `~/.cache/fairchem`) and provide relevant settings:
+
+```yaml
+model_names:
+  - uma-s-1p2p1
+fair_chem_task: "omol"        # FairChem only
+fair_chem_setting: "turbo"    # FairChem only, optional ('turbo' is recommended for MD)
+```
 
 ## Running scripts
 
@@ -80,7 +99,7 @@ Submit from the repository root, as `slurm/slurm_script.sh` and the input YAML a
 
 ## Examples
 
-Note: these examples will load precalculated .npz results to produce figures, as running the calculations requires the respective models (and a GPU is recommended, although each YAML's `cuda_device` can be set to `"cpu"`). To run the examples below: .npz files of saved results in the ORA repository (`results/npz`) linked at the top of this file should be copied to replace `react_ml_test_public/out/npz`, and models from the ORA repository (`models/`) should be copied to replace `react_ml_test_public/models/`. If you wish to re-calculate results from scratch, clear all cache .npz files by running `rmlt clear-npz-cache` (or simply do not copy them in). 
+Note: these examples will load precalculated .npz results to produce figures, as running the calculations requires the respective models (and a GPU is recommended). To run the examples below: .npz files of saved results in the ORA repository (`results/npz`) linked at the top of this file should be copied to replace `react_ml_test_public/out/npz`, and models from the ORA repository (`models/`) should be copied to replace `react_ml_test_public/models/`. If you wish to re-calculate results from scratch, clear all cache .npz files by running `rmlt clear-npz-cache` (or simply do not copy them in). 
 
 ### 1. Test set energy + force errors:
 

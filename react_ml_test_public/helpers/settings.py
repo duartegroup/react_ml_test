@@ -61,10 +61,32 @@ FORMATTED_MODEL_NAMES = {"MACE-OFF23_small": "MACE-OFF-23 Small",
                         "MACE-OFF23_medium_endo_DA_1.0_train_from_scratch":"MACE From Scratch"
                         }
 
+# FairChem (https://fair-chem.github.io) models are fetched by name from their hub rather than
+# from a *.model file, so they are recognised by name alone. FairChem and MACE cannot be
+# installed in the same env, so a fairchem model is only loadable from the separate fair_chem
+# env - see the README. The names are the ones fairchem.core.pretrained_mlip.available_models
+# serves; the eSEN / AllScAI entries name the task they are trained for in the name itself.
+FAIRCHEM_MODELS = ["uma-s-1p2p1",
+                   "uma-s-1p2",
+                   "uma-s-1p1",
+                   "uma-m-1p1",
+                   "esen-md-direct-all-omol",
+                   "esen-sm-conserving-all-omol",
+                   "esen-sm-direct-all-omol",
+                   "allscaip-md-conserving-all-omol",
+                   "allscaip-md-direct-all-omol",
+                   "esen-sm-conserving-all-oc25",
+                   "esen-md-direct-all-oc25",
+                   "esen-sm-filtered-odac25",
+                   "esen-sm-full-odac25"
+                   ]
+
 MACE_MODEL_LOADER = 'MACE'
 ANI_MODEL_LOADER = 'ani'
 GRAPH_PES_MODEL_LOADER = 'graph-pes'
-MODEL_LOADERS = [MACE_MODEL_LOADER, ANI_MODEL_LOADER, GRAPH_PES_MODEL_LOADER]
+FAIRCHEM_MODEL_LOADER = 'fairchem'
+MODEL_LOADERS = [MACE_MODEL_LOADER, ANI_MODEL_LOADER, GRAPH_PES_MODEL_LOADER,
+                 FAIRCHEM_MODEL_LOADER]
 
 # input data directories
 DATA_DIR =  f"{root_data_dir}data"

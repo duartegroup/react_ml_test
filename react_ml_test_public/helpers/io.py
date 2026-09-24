@@ -14,6 +14,8 @@ from react_ml_test_public.helpers.settings import (
     ANI_1XNR_MODEL_DIR,
     ANI_MODEL_LOADER,
     ANI_MODELS,
+    FAIRCHEM_MODEL_LOADER,
+    FAIRCHEM_MODELS,
     GRAPH_PES_MODEL_LOADER,
     HARTREE_TO_EV,
     MACE_MODEL_LOADER,
@@ -627,11 +629,13 @@ def _cueq_setup_hint() -> str:
 
 def load_model_calculator(model_name: str,
                           device='cuda:0',
-                          model_loader: Literal['MACE', 'ani', 'graph-pes'] = None,
+                          model_loader: Literal['MACE', 'ani', 'graph-pes', 'fairchem'] = None,
                           enable_cueq: bool = False,
                           dtype: Literal["", "float32", "float64"] = "",
                           head: str = "Default",
-                          model_dir: str = None):
+                          model_dir: str = None,
+                          fair_chem_task: str = None,
+                          fair_chem_setting: str = None):
     """
     Flexible model loader for different types of model based on model_name (i.e. ACE models/ MACE models / ANI models / transformer models etc.)
 
@@ -648,10 +652,15 @@ def load_model_calculator(model_name: str,
     repository's ``models/`` directory.
 
     ``enable_cueq`` asks for the cuEquivariance acceleration, which needs its extras
-    installed - matching the mace version and this machine's CUDA build - and a GPU. It is
-    deliberately not a best-effort setting: if it is asked for and cannot be set up, the
-    model is not loaded (a warning spells out what cueq needs, see ``_cueq_setup_hint``)
-    rather than quietly running unaccelerated.
+    installed - matching the mace version and this machine's CUDA build - and a GPU. If it is asked for and 
+    cannot be set up, the model is not loaded.
+
+    A model named in ``FAIRCHEM_MODELS`` is loaded with FairChem (see settings), which is
+    fetched by name from FairChem's own hub rather than from ``model_dir``. FairChem cannot
+    share an env with MACE, so the fairchem import is lazy like the others: this is loadable
+    from the separate ``fair_chem`` env. ``fair_chem_task``
+    (e.g. 'omol' for molecules) and ``fair_chem_setting`` (e.g. 'turbo') go to FairChem as
+    its ``task_name`` and ``inference_settings``.
     """
 
     # resolve the requested device before building any calculator
@@ -680,6 +689,8 @@ def load_model_calculator(model_name: str,
                     model_loader = MACE_MODEL_LOADER
                 elif model_name in ANI_MODELS:
                     model_loader = ANI_MODEL_LOADER
+                elif model_name in FAIRCHEM_MODELS:
+                    model_loader = FAIRCHEM_MODEL_LOADER
                 elif any(sub_model_name in model_name for sub_model_name in MACE_MODELS + ['MACE', 'EGRET']):
                     model_loader = MACE_MODEL_LOADER
                 elif any(sub_model_name in model_name for sub_model_name in ANI_MODELS):
@@ -751,6 +762,29 @@ def load_model_calculator(model_name: str,
                 model = load_model(model_fpath)
                 model.to(dtype=torch.float64)
                 return model.ase_calculator()
+
+            elif model_loader == FAIRCHEM_MODEL_LOADER:
+
+                # fairchem model loader. A fairchem model is loadable from
+                # the separate fair_chem env (see the README). Loads model from the FairChemHub.
+                try:
+                    from fairchem.core import FAIRChemCalculator, pretrained_mlip
+                except ImportError as e:
+                    # the mistake this catches is running a fairchem model from a MACE env,
+                    # where 'no module named fairchem' does not say that is the problem
+                    logger.warning(f"{model_name} is a FairChem model, but fairchem is not "
+                                   f"installed in this environment ({e}). Run this from the fair_chem env "
+                                   f"(see the README): Returning None for calc instead...")
+                    return None
+
+                # get_predict_unit takes 'cuda' / 'cpu' / None, not a 'cuda:N' torch device
+                predictor = pretrained_mlip.get_predict_unit(
+                    model_name,
+                    device=device.split(':')[0],
+                    inference_settings=fair_chem_setting or 'default',
+                )
+                return FAIRChemCalculator(predictor, task_name=fair_chem_task)
+
             else:
                 raise NameError(f"Model loader: {model_loader} is not valid.")
 

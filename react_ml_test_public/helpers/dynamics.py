@@ -24,7 +24,9 @@ def get_trajectory_with_ase(init_config: ase.Atoms,
                             override_cache: bool = False,
                             model_dir: str = None,
                             enable_cueq: bool = False,
-                            step_times: list = None):
+                            step_times: list = None,
+                            fair_chem_task: str = None,
+                            fair_chem_setting: str = None):
     """
 
     :param init_config_fp:
@@ -32,6 +34,10 @@ def get_trajectory_with_ase(init_config: ase.Atoms,
     :param output_name:
     :param enable_cueq: use the cuEquivariance MACE speed-up for the calculator (needs a CUDA
                         GPU and mace-torch's cueq extras).
+    :param fair_chem_task: FairChem task to run a fairchem model as, e.g. 'omol' for molecules
+                           (see load_model_calculator).
+    :param fair_chem_setting: FairChem inference settings, e.g. 'turbo' (see
+                              load_model_calculator).
     :param step_times: optional list to append the wall time (s) of every MD step to, for
                        benchmarking (see save_md_run_csv). A run that returns an existing
                        trajectory without taking any steps leaves it empty.
@@ -54,9 +60,12 @@ def get_trajectory_with_ase(init_config: ase.Atoms,
     dt = md_config.dt
     interval = md_config.interval
 
-    # load calculator (model_dir None -> MODEL_DIR, see resolve_model_dir)
+    # load calculator (model_dir None -> MODEL_DIR, see resolve_model_dir; the last two
+    # settings are FairChem's, and ignored by the other loaders)
     calc = load_model_calculator(model_name, device=cuda_device, dtype='float32',
-                                 model_dir=model_dir, enable_cueq=enable_cueq)
+                                 model_dir=model_dir, enable_cueq=enable_cueq,
+                                 fair_chem_task=fair_chem_task,
+                                 fair_chem_setting=fair_chem_setting)
 
     # make copy of init config
     init_config = init_config.copy()

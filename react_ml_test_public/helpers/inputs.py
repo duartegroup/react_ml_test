@@ -691,6 +691,13 @@ def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
     override_saved = _as_bool(input_config.get("override_saved", False), default=False)
     cuda_device = str(input_config.get("cuda_device", "cuda:0"))
 
+    # FairChem only: the task a fairchem model is run as (e.g. 'omol' for molecules) and its
+    # inference settings (e.g. 'turbo'). Ignored by the other model loaders.
+    fair_chem_task = input_config.get("fair_chem_task", None)
+    fair_chem_task = str(fair_chem_task) if fair_chem_task is not None else None
+    fair_chem_setting = input_config.get("fair_chem_setting", None)
+    fair_chem_setting = str(fair_chem_setting) if fair_chem_setting is not None else None
+
     return {
         "data_dir": data_dir,
         "out_dir": out_dir,
@@ -720,6 +727,8 @@ def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
         "enable_cueq": enable_cueq,
         "override_saved": override_saved,
         "cuda_device": cuda_device,
+        "fair_chem_task": fair_chem_task,
+        "fair_chem_setting": fair_chem_setting,
     }
 
 

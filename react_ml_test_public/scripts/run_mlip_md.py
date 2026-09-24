@@ -51,7 +51,9 @@ def run_md_eval(init_configs: list,
                 enable_cueq: bool = False,
                 override_saved: bool = False,
                 cuda_device: str = "cuda:0",
-                device_label: str = None):
+                device_label: str = None,
+                fair_chem_task: str = None,
+                fair_chem_setting: str = None):
 
     """Run every MD trajectory for one model, and write a benchmark CSV for each of them.
 
@@ -59,8 +61,9 @@ def run_md_eval(init_configs: list,
     ``save_md_run_csv``): the device the run used, the calculator, the wall time of every
     step, the mean step time, and the step count / simulated time / overall run time.
     ``device_label`` names that device in the CSV and defaults to the name of the resolved
-    ``cuda_device`` (see ``compute_device_label``). ``enable_cueq`` and ``model_dir`` are
-    forwarded to every run's calculator.
+    ``cuda_device`` (see ``compute_device_label``). ``enable_cueq``, ``model_dir`` and the
+    FairChem pair ``fair_chem_task`` / ``fair_chem_setting`` are forwarded to every run's
+    calculator.
     """
 
     # the CSV records the device by name (e.g. 'NVIDIA H100 80GB HBM3'), once for the run
@@ -95,7 +98,9 @@ def run_md_eval(init_configs: list,
                                                  override_cache=override_saved,
                                                  model_dir=model_dir,
                                                  enable_cueq=enable_cueq,
-                                                 step_times=step_times)
+                                                 step_times=step_times,
+                                                 fair_chem_task=fair_chem_task,
+                                                 fair_chem_setting=fair_chem_setting)
             end_time = time()
             md_time = end_time - start_time
             steps = float(md_config.fs / md_config.dt)
@@ -164,6 +169,10 @@ if __name__ == "__main__":
 
         enable_cueq:          # use the cuEquivariance MACE speed-up (needs a CUDA GPU and
                               # mace-torch's cueq extras).
+        fair_chem_task:       # FairChem only: the task a FAIRCHEM_MODELS entry runs as, e.g.
+                              # "omol" for molecules (run this script from the fair_chem env).
+        fair_chem_setting:    # FairChem only: e.g. "turbo", recommended for MD (fairchem's
+                              # own default is "default").
         override_saved:       # re-run MD even if a saved trajectory already exists.
         cuda_device:          # GPU device for the MLIP calculators (default "cuda:0",
                               # falls back to "cpu" if that device is not found).
@@ -233,6 +242,8 @@ if __name__ == "__main__":
     enable_cueq = resolved["enable_cueq"]
     override_saved = resolved["override_saved"]
     cuda_device = resolved["cuda_device"]
+    fair_chem_task = resolved["fair_chem_task"]
+    fair_chem_setting = resolved["fair_chem_setting"]
     del resolved
 
     # resolve the requested device (i.e. fall back to 'cpu' if the GPU is not available)
@@ -308,4 +319,6 @@ if __name__ == "__main__":
                                    constraint=constraint,
                                    enable_cueq=enable_cueq,
                                    override_saved=override_saved,
-                                   cuda_device=cuda_device)
+                                   cuda_device=cuda_device,
+                                   fair_chem_task=fair_chem_task,
+                                   fair_chem_setting=fair_chem_setting)
