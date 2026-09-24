@@ -1,0 +1,28 @@
+# save_dft_inputs_from_xyz.py input YAML - anthracene DA full active-learning trajectory
+# samples, ORCA single points (wB97M-D3BJ/def2-TZVP).
+
+# Run with:
+#   rmlt save-dft-inputs-from-xyz inputs/dft/anthracene_DA_full_al_traj_samples.yaml
+
+# Inputs are written to scripts/dft/sp/<input name>/ (no extra_name_tag here), one
+# subdirectory per config in the .xyz. Paths are relative to the repository root.
+
+# === 1. INPUT CONFIG ===
+input_fpath: data/reaction_data/anthracene_DA/TS/anthracene_1_4_DA_in_toluene_OFF46_opt_TS_cutoff=5_2.xyz
+# other sources of this system's samples, run the same way:
+# input_fpath: data/reaction_data/anthracene_DA/full_al_traj_samples_dist_filtered.xyz
+# input_fpath: data/reaction_data/anthracene_DA/react_traj/anthracene_1_4_MMFF_vac_MACE-OFF23_46_reaction.xyz
+# input_fpath: data/reaction_data/anthracene_DA/TS/anthracene_1_4_DA_vac_OFF46_opt_TS.xyz
+
+# === 2. DFT METHOD ===
+method: "orca"
+charge: 0
+mult: 1
+
+# === 3. ORCA SETTINGS (applied to the mlptrain / autode configs) ===
+n_cores: 8
+orca_keywords: ["WB97M-D3BJ", "def2-TZVP", "TightSCF", "EnGrad"]
+extra_name_tag: None
+
+# === 4. RUN OPTIONS ===
+out_dir: "scripts/dft/sp"

@@ -1,0 +1,26 @@
+# save_dft_inputs_from_xyz.py input YAML - CPD + MVK DA test set VASP inputs, for
+# plane-wave DFT (INCAR + POSCAR per config).
+
+# Run with:
+#   rmlt save-dft-inputs-from-xyz inputs/dft/CPD_MVK_DA_test_vasp.yaml
+
+# Inputs are written to scripts/dft/sp/<input name>_VASP/<input name>_<i>/, one
+# subdirectory per config in the .xyz. Paths are relative to the repository root.
+
+# === 1. INPUT CONFIG ===
+input_fpath: data/reaction_data/CPD_MVK_DA/test/CPD_MVK_DA_test.xyz
+
+# === 2. DFT METHOD ===
+method: "vasp"
+
+# === 3. VASP SETTINGS ===
+# written into each INCAR on top of the built-in defaults (SYSTEM, PREC, ISMEAR, ALGO, NELM)
+box_size: 50.0                  # affects plane-wave performance (make as small as possible)
+incar_settings:
+  ENCUT: 550
+  EDIFF: "1E-5"
+  SIGMA: 0.1
+  ISPIN: 1
+
+# === 4. RUN OPTIONS ===
+out_dir: "scripts/dft/sp"

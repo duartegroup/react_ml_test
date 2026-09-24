@@ -26,18 +26,18 @@ Then:
    A regular install (`pip install .`) also works, but will ignore future code edits.
 
 Notes:
-- Run all scripts from the repository root directory. The scripts read `data/`, `models/`, `inputs/` and write to `out/` relative to the current working directory, so they must be launched from the repo root (or a directory containing these folders).
 - To run the ani-1nxr model, you must have the neurchem project in the parent directory of this repo. You must also then ensure you have the `libcublas.so.9.2` file (from CUDA 9.2) added to the `LD_LIBRARY_PATH`.
 - For some features a specific fork of MACE is required (e.g. train loss logging + patience warmup, please let me know if you need these features!)
 
 ## Running scripts
 
-Installing the package (see [Setup](#setup)) adds the `rmlt` command to your `PATH`.
-Scripts live in the `react_ml_test_public.scripts` package, and `rmlt` runs them by name from the repository root, for e.g.:
+Installing the package (see [Setup](#setup)) adds the `rmlt` command to your `PATH`. Scripts live in the `react_ml_test_public.scripts` package, and `rmlt` runs them by name from the repository root, for e.g.:
 
 ```bash
 rmlt run-test-set-comparison <args>
 ```
+
+The scripts read `data/`, `models/`, `inputs/` and write to `out/` relative to the current working directory, so they must be launched from the repository root. If you set up your own project and which to use the `rmlt` command, they can be run from a directory containing these folders in the same layout (with modifications required for the yaml inputs to specify where the `data`, `models`, and `out` subdirectories should be found).
 
 List all available scripts with:
 
@@ -61,7 +61,7 @@ rmlt slurm run-mlip-md inputs/md/CPD_MVK_DA_dynamics_vac.yaml
 
 The job is submitted with `slurm/slurm_script.sh`, a generic script that runs `rmlt` with the arguments it
 is given. **The `#SBATCH` lines in that script are the job's resources** - partition, time, memory,
-GPU and cluster - and they are meant to be edited by hand to suit the run.
+GPU and cluster - and they are meant to be edited by hand to suit the run. Please modify these to match your HPC system's specific submission architecture (assuming a SLURM workflow).
 
 To see what would be submitted, and which resources the script asks for, without queueing anything:
 
@@ -174,6 +174,11 @@ This can be run for the other two systems using the provided yaml inputs: `input
 #### 5. `rmlt run-ds-analysis`
 
     - DESCRIPTION: analyse the spread of your dataset about a reaction coordinate, with SOAP descriptors, energy / force distributions etc.
+
+#### 6. `rmlt save-dft-inputs-from-xyz`
+
+    - DESCRIPTION: Generate DFT (ORCA / VASP) single-point input files from an .xyz file of configurations (one input per config).
+    - USAGE: Run `rmlt save-dft-inputs-from-xyz inputs/dft/guajadial_DA_test.yaml`, which writes the ORCA inputs to the `out_dir` the YAML sets (one subdirectory per config). YAML inputs for the other systems (and for VASP) are in `inputs/dft/`.
 
 ### 2. Analysis
 

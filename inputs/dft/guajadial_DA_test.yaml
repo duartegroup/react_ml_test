@@ -1,0 +1,34 @@
+# save_dft_inputs_from_xyz.py input YAML - guajadial DA test set ORCA single points
+# (wB97M-D3BJ/def2-TZVPPD, i.e. the level of theory used for the vacuum test set).
+
+# Run with:
+#   rmlt save-dft-inputs-from-xyz inputs/dft/guajadial_DA_test.yaml
+
+# Inputs are written to scripts/dft/sp/<input name>_<extra_name_tag>/, one subdirectory
+# per config in the .xyz. Paths are relative to the repository root.
+
+# === 1. INPUT CONFIG ===
+input_fpath: data/reaction_data/guajadial_DA/test/guajadial_DA_test_vac_only.xyz
+# the solvent-containing test set also exists, and is run the same way:
+# input_fpath: data/reaction_data/guajadial_DA/test/guajadial_DA_test.xyz
+
+# === 2. DFT METHOD ===
+method: "orca"
+charge: 0
+mult: 1
+
+# === 3. ORCA SETTINGS (applied to the mlptrain / autode configs) ===
+n_cores: 16
+orca_keywords: ["WB97M-D3BJ", "def2-TZVPPD", "TightSCF", "EnGrad"]
+# basis set block input, i.e. what the orca_keywords line above cannot express (the
+# auxiliary basis slots), written into each .inp as a %basis block:
+#   basis: AuxJ "aug-cc-pVTZ/JK"
+max_core: 4000                  # 6000 for the in-solvent systems
+extra_name_tag: "wB97M_TZVPPD"
+# lower level of theory used for the PBE comparison:
+#   n_cores: 8
+#   orca_keywords: ["PBE", "def2-TZVP", "TightSCF", "EnGrad"]
+#   extra_name_tag: "PBE_def2_TZVP"
+
+# === 4. RUN OPTIONS ===
+out_dir: "scripts/dft/sp"

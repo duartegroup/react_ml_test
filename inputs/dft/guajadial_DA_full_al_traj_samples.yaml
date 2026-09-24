@@ -1,0 +1,26 @@
+# save_dft_inputs_from_xyz.py input YAML - guajadial full active-learning trajectory
+# samples, ORCA single points (wB97M-D3BJ/def2-TZVP).
+
+# Run with:
+#   rmlt save-dft-inputs-from-xyz inputs/dft/guajadial_DA_full_al_traj_samples.yaml
+
+# Inputs are written to scripts/dft/sp/<input name>/ (no extra_name_tag here), one
+# subdirectory per config in the .xyz. Paths are relative to the repository root.
+
+# === 1. INPUT CONFIG ===
+input_fpath: data/reaction_data/guajadial_DA/guajadial_extra_traj_samples_dist_filtered_vac.xyz
+# the in-solvent samples, run the same way:
+# input_fpath: data/reaction_data/guajadial_DA/guajadial_extra_traj_samples_dist_filtered_solv.xyz
+
+# === 2. DFT METHOD ===
+method: "orca"
+charge: 0
+mult: 1
+
+# === 3. ORCA SETTINGS (applied to the mlptrain / autode configs) ===
+n_cores: 16
+orca_keywords: ["WB97M-D3BJ", "def2-TZVP", "TightSCF", "EnGrad"]
+extra_name_tag: None
+
+# === 4. RUN OPTIONS ===
+out_dir: "scripts/dft/sp"

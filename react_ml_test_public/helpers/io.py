@@ -376,6 +376,72 @@ def check_orca_outputs(work_dir: str, input_name: str):
     print("=========================")
 
 
+def format_orca_basis_block(basis_entries: List[tuple]) -> str:
+    """
+    Format the lines of an ORCA ``%basis`` block from ``(key, value)`` pairs.
+
+    ORCA takes the basis set names in the block in quotation marks, e.g.
+    ``AuxJ "aug-cc-pVTZ/JK"``, while the ``Decontract*`` switches are bare booleans:
+    https://www.faccts.de/docs/orca/6.0/manual/contents/detailed/basisset.html
+
+    Parameters:
+        basis_entries (list): (key, value) pairs, e.g. [("AuxJ", "aug-cc-pVTZ/JK")]
+
+    Returns:
+        (str): The block, e.g. ``%basis\\n  AuxJ "aug-cc-pVTZ/JK"\\nend\\n``
+    """
+
+    lines = ["%basis"]
+    for key, value in basis_entries:
+        lines.append(f"  {key} {_orca_block_value(value)}")
+    lines.append("end")
+
+    return "\n".join(lines) + "\n"
+
+
+def _orca_block_value(value) -> str:
+    """Render one ORCA block value: a bare boolean, else the value in quotation marks."""
+
+    if isinstance(value, bool):
+        return "true" if value else "false"
+
+    # a boolean written as a string (e.g. from a YAML "false") is also left unquoted
+    text = str(value)
+    if text.lower() in ("true", "false"):
+        return text.lower()
+
+    return f'"{text}"'
+
+
+def insert_orca_input_block(input_fpath: str, block: str) -> None:
+    """
+    Insert a block into a generated ORCA input file, after the leading ``!`` line.
+
+    autode's ORCA wrapper (``autode.wrappers.ORCA.ORCA.generate_input_for``) writes the
+    ``!`` simple-input keywords followed by a fixed set of blocks, with no hook for extra
+    block input. A block autode cannot express - e.g. the orbital / auxiliary basis slots
+    of ``%basis``, which have no equivalent in mlptrain's ``orca_keywords`` - is therefore
+    inserted into the file once autode has generated it.
+
+    Parameters:
+        input_fpath (str): Path to the ORCA .inp file to modify
+        block (str): The block to insert, e.g. from ``format_orca_basis_block``
+    """
+
+    with open(input_fpath, 'r') as f:
+        lines = f.readlines()
+
+    # the ! line is written first, so the block goes directly after it (ORCA reads block
+    # input in any order, so inserting at the top of the file is fine either way)
+    insert_at = 1 if lines and lines[0].lstrip().startswith('!') else 0
+    lines.insert(insert_at, block if block.endswith('\n') else block + '\n')
+
+    with open(input_fpath, 'w') as f:
+        f.writelines(lines)
+
+    logger.info(f"Inserted block into {input_fpath}")
+
+
 def resolve_cuda_device(cuda_device: str = "cuda:0") -> str:
     """Resolve a requested torch device onto one that actually exists on this machine.
 

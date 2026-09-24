@@ -10,6 +10,7 @@ function in this module that takes in and processes the YAML for that script:
     resolve_mlip_ts_opt_yaml(...)                  -> run_mlip_ts_opt.py
     resolve_mlip_md_yaml(...)                      -> run_mlip_md.py
     resolve_trajectory_analysis_yaml(...)          -> run_trajectory_analysis.py
+    resolve_save_dft_inputs_yaml(...)              -> save_dft_inputs_from_xyz.py
 
 Each function performs the shared file checks / parsing / ``${var}`` substitution
 (via ``_load_yaml_config``) followed by that script's own field resolution and
@@ -34,6 +35,7 @@ from react_ml_test_public.helpers.io import (
 )
 from react_ml_test_public.helpers.settings import (
     DATA_DIR,
+    DFT_DIR,
     KCAL_PER_MOL,
     KJ_PER_MOL,
     MEV,
@@ -834,4 +836,179 @@ def resolve_trajectory_analysis_yaml(input_yaml_fpath: str, parser=None):
         "r1_range": r1_range,
         "r2_range": r2_range,
         "show_legend": show_legend,
+    }
+
+
+# The keys of ORCA's %basis block, spelled as ORCA documents them (see the "Choice of
+# Basis Set" section of the manual); a key given in any other case is normalised onto
+# these, so "auxj" in a YAML becomes "AuxJ" in the generated input
+_ORCA_BASIS_BLOCK_KEYS = (
+    "Basis", "AuxJ", "AuxJK", "AuxC", "CABS",
+    "NewGTO", "NewECP", "NewAuxGTO",
+    "Decontract", "DecontractBas", "DecontractAuxJ", "DecontractAuxJK",
+    "DecontractAuxC", "DecontractCABS",
+)
+_ORCA_BASIS_BLOCK_KEYS_BY_LOWER = {key.lower(): key for key in _ORCA_BASIS_BLOCK_KEYS}
+
+
+def _orca_basis_pair(key, value, parser=None):
+    """Normalise one ORCA ``%basis`` block key / value pair from the input YAML."""
+    key = str(key).strip()
+    if len(key.split()) != 1:
+        _error(parser, f"'basis' block keys must be a single word, got: {key!r}.")
+    # normalise a known key onto ORCA's own spelling (e.g. "auxj" -> "AuxJ")
+    key = _ORCA_BASIS_BLOCK_KEYS_BY_LOWER.get(key.lower(), key)
+
+    # strip the quotation marks ORCA takes around a basis set name, if the YAML has them
+    value = str(value).strip()
+    if len(value) > 1 and value[0] == value[-1] and value[0] in "\"'":
+        value = value[1:-1]
+    if not value:
+        _error(parser, f"Missing value for the 'basis' block key {key!r}.")
+
+    return key, value
+
+
+def _parse_orca_basis_entry(entry, parser=None):
+    """Parse one ``basis`` field entry into ORCA ``%basis`` block ``(key, value)`` pairs.
+
+    An entry is either a mapping of block keys to their values, or a string of a block
+    key and its value, e.g. ``'AuxJ "aug-cc-pVTZ/JK"'`` - a string holding only a basis
+    set name is taken as the orbital ``Basis``, so ``basis: def2-TZVPPD`` also works.
+    """
+    if isinstance(entry, dict):
+        return [_orca_basis_pair(key, value, parser) for key, value in entry.items()]
+
+    if isinstance(entry, str):
+        parts = entry.strip().split(None, 1)
+        if not parts:
+            _error(parser, "'basis' entries must not be empty.")
+        # a bare basis set name sets the orbital basis set
+        key, value = ("Basis", parts[0]) if len(parts) == 1 else tuple(parts)
+        return [_orca_basis_pair(key, value, parser)]
+
+    _error(parser, f"'basis' entries must be strings or mappings of block keys to values, "
+                   f"got a {type(entry).__name__}: {entry!r}.")
+
+
+def _parse_orca_basis(basis_config, parser=None):
+    """Parse the optional ``basis`` field of the save_dft_inputs_from_xyz YAML.
+
+    Returns a list of ORCA ``%basis`` block ``(key, value)`` pairs (see
+    ``helpers.io.format_orca_basis_block``), or None when the field is unset, in which
+    case no block is written into the generated input.
+
+    Accepted spellings, as a single entry or as a list of them:
+
+        basis: AuxJ "aug-cc-pVTZ/JK"        # block key + basis set name
+        basis: "AuxJ aug-cc-pVTZ/JK"        # the same, quoted as a whole
+        basis: def2-TZVPPD                  # no key: the orbital (Basis) set
+        basis:                              # a mapping of as many keys as needed
+          Basis: def2-TZVPPD
+          AuxJ: "aug-cc-pVTZ/JK"
+    """
+    if basis_config is None:
+        return None
+
+    entries = basis_config if isinstance(basis_config, list) else [basis_config]
+    if not entries:
+        _error(parser, "'basis' must not be an empty list.")
+
+    basis_entries = []
+    for entry in entries:
+        basis_entries.extend(_parse_orca_basis_entry(entry, parser))
+    return basis_entries
+
+
+def resolve_save_dft_inputs_yaml(input_yaml_fpath: str, parser=None):
+    """Load + process the input YAML for save_dft_inputs_from_xyz.py.
+
+    The YAML specifies the .xyz configuration file to convert, the level of theory
+    (``method: orca`` / ``vasp``) with that method's settings, and where the input files
+    are written. Returns a flat dict of the config variables that the script's ``__main__``
+    declares.
+
+    A relative ``input_fpath`` that does not resolve from the current working directory is
+    taken to be relative to the optional ``data_dir`` field (default ``DATA_DIR``), so it
+    can be spelled from either the repository root or the data root, and ``out_dir`` (which
+    defaults to ``DFT_DIR``, i.e. ``out/dft``) is the directory the per-config input
+    directories are created under. The ORCA settings (``n_cores``, ``orca_keywords``,
+    ``max_core``) are returned for the script to apply to the mlptrain / autode configs,
+    which is where the input-file generation reads them from; each defaults to None, which
+    leaves that config value alone.
+
+    The optional ``basis`` field holds ORCA block input that the ``orca_keywords`` simple
+    input line cannot express - most usefully the auxiliary basis slots of ``%basis`` -
+    and is returned as its ``(key, value)`` pairs for the script to write into each
+    generated input file (see ``_parse_orca_basis``).
+    """
+    input_config = _load_yaml_config(input_yaml_fpath, parser)
+
+    def _need(key):
+        value = input_config.get(key, None)
+        if value is None:
+            _error(parser, f"Missing required field '{key}' in input YAML.")
+        return value
+
+    # ===== method / output directory =====
+    method = str(_need("method")).lower()
+    if method not in ("orca", "vasp"):
+        _error(parser, f"Unrecognised method: {method!r} (choose from 'orca' / 'vasp').")
+    out_dir = resolve_out_root(input_config.get("out_dir", None) or DFT_DIR)
+
+    # ===== input config file =====
+    data_dir = input_config.get("data_dir", DATA_DIR)
+    input_fpath = resolve_data_path(str(_need("input_fpath")), data_dir)
+    if not os.path.isfile(input_fpath):
+        _error(parser, f"input_fpath not found: {input_fpath!r} "
+                       f"(relative paths are taken as relative to data_dir: {data_dir!r}).")
+
+    # ===== ORCA settings =====
+    if method == "orca":
+        # the charge / multiplicity of every config in the .xyz, as ORCA input needs them
+        charge = int(_need("charge"))
+        mult = int(_need("mult"))
+        # block input ORCA needs but mlptrain's orca_keywords (simple input) cannot hold,
+        # written into each generated input as a %basis block (see the script)
+        basis = _parse_orca_basis(input_config.get("basis", None), parser)
+    else:
+        charge, mult, basis = None, None, None
+        if input_config.get("basis", None) is not None:
+            _error(parser, "'basis' is only used by the ORCA method, but the input YAML "
+                           f"sets it with method: {method!r}.")
+
+    n_cores = input_config.get("n_cores", None)
+    n_cores = int(n_cores) if n_cores is not None else None
+    orca_keywords = input_config.get("orca_keywords", None)
+    if orca_keywords is not None and not isinstance(orca_keywords, list):
+        _error(parser, "'orca_keywords' must be a list of ORCA keyword strings, "
+                       "e.g. [\"WB97M-D3BJ\", \"def2-TZVPPD\", \"TightSCF\", \"EnGrad\"].")
+    max_core = input_config.get("max_core", None)
+    max_core = float(max_core) if max_core is not None else None
+    extra_name_tag = input_config.get("extra_name_tag", None)
+    extra_name_tag = str(extra_name_tag) if extra_name_tag is not None else None
+
+    # ===== VASP settings =====
+    if method == "vasp":
+        box_size = float(_need("box_size"))
+        incar_settings = input_config.get("incar_settings", None) or {}
+        if not isinstance(incar_settings, dict):
+            _error(parser, "'incar_settings' must be a mapping of INCAR parameters, "
+                           "e.g. {ENCUT: 550, EDIFF: 1E-5}.")
+    else:
+        box_size, incar_settings = None, None
+
+    return {
+        "input_fpath": input_fpath,
+        "charge": charge,
+        "mult": mult,
+        "method": method,
+        "out_dir": out_dir,
+        "n_cores": n_cores,
+        "orca_keywords": orca_keywords,
+        "basis": basis,
+        "max_core": max_core,
+        "extra_name_tag": extra_name_tag,
+        "box_size": box_size,
+        "incar_settings": incar_settings,
     }

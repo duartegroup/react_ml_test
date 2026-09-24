@@ -1,0 +1,29 @@
+# save_dft_inputs_from_xyz.py input YAML - anthracene DA test set ORCA single points
+# (wB97M-D3BJ/def2-TZVPP).
+
+# Run with:
+#   rmlt save-dft-inputs-from-xyz inputs/dft/anthracene_DA_test.yaml
+
+# Inputs are written to scripts/dft/sp/<input name>_<extra_name_tag>/, one subdirectory
+# per config in the .xyz. Paths are relative to the repository root.
+
+# === 1. INPUT CONFIG ===
+input_fpath: data/reaction_data/anthracene_DA/test/anthracene_DA_test.xyz
+
+# === 2. DFT METHOD ===
+method: "orca"
+charge: 0
+mult: 1
+
+# === 3. ORCA SETTINGS (applied to the mlptrain / autode configs) ===
+n_cores: 16
+orca_keywords: ["WB97M-D3BJ", "def2-TZVPP", "TightSCF", "EnGrad"]
+max_core: 6000
+extra_name_tag: "wB97M_TZVPP"
+# lower level of theory used for the PBE comparison:
+#   n_cores: 8
+#   orca_keywords: ["PBE", "def2-TZVP", "TightSCF", "EnGrad"]
+#   extra_name_tag: "PBE_def2_TZVP"
+
+# === 4. RUN OPTIONS ===
+out_dir: "scripts/dft/sp"
