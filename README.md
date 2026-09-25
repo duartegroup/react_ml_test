@@ -131,6 +131,8 @@ To run this for the other systems, use `inputs/irc/anthracene_DA_IRC_barrier.yam
 
 ### 3. TS Optimisation + dynamics:
 
+
+
 E.g. for fine-tuned model TS optimisation in vacuum and dynamics for CPD + MVK DA system:
 
 #### 1. TS Optimisation
@@ -145,8 +147,6 @@ Then, run: `rmlt run-mlip-md inputs/md/CPD_MVK_DA_dynamics_vac.yaml`.
 
 This will take the output optimised TS in vacuum from 1. and run 10 1ps dynamics runs, with the trajectories output to `out/trj/`.
 
-One CSV of the run's performance is written per MD run to `out/csv/md/`, named after its trajectory: the compute device, the calculator used, the wall time of every step, the mean step time, the number of steps run, the simulated time they amount to and the overall run time. These are what makes two runs (or two machines) comparable.
-
 #### 3. Analysis
 
 To analyse the output trajectories, we then run:
@@ -155,8 +155,7 @@ To analyse the output trajectories, we then run:
 
 Which will produce 2D trajectory plots like that in Figure 3d\) in `out/plt/trj_atom_dist/`, and print relevant RS / PS formation ratios.
 
-The same process can be run but for solvent, using the relevant `in_solvent` yaml scripts (note that this can take some time).
-YAML inputs for the other two systems are also found in `inputs/`.
+The same process can be run but for solvent, using the relevant `in_solvent` yaml scripts (note that this can take some time). YAML inputs for the other two systems are also found in `inputs/`.
 
 ### 4. Pretraining bias analysis:
 
