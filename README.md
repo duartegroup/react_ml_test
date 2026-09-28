@@ -37,6 +37,7 @@ conda create -n fair_chem python=3.14 -c conda-forge
 conda activate fair_chem
 pip install fairchem-core
 pip install -e . --no-deps          # once, from this repository: provides the `rmlt` command
+hf auth login                       # login to hugging face, required to access UMA models after autorization (see https://github.com/facebookresearch/fairchem), will save an access token to your local machine
 ```
 
 Name a model from `FAIRCHEM_MODELS` in `settings.py` (the names FairChem serves are listed there - models are fetched from FairChem's hub on first use and cached under `~/.cache/fairchem`) and provide relevant settings:
