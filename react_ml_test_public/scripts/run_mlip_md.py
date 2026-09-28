@@ -45,7 +45,7 @@ def run_md_eval(init_configs: list,
                 formatted_model_name: str,
                 system_name: str,
                 traj_dir: str = TRAJ_DIR,
-                csv_dir: str = None,
+                md_csv_dir: str = None,
                 model_dir: str = None,
                 constraint: str = None,# IndexedConstraint = None,
                 enable_cueq: bool = False,
@@ -57,7 +57,7 @@ def run_md_eval(init_configs: list,
 
     """Run every MD trajectory for one model, and write a benchmark CSV for each of them.
 
-    With ``csv_dir`` set, one CSV per run is saved under ``<csv_dir>/md`` (see
+    With ``md_csv_dir`` set, one CSV per run is saved under ``<md_csv_dir>/md`` (see
     ``save_md_run_csv``): the device the run used, the calculator, the wall time of every
     step, the mean step time, and the step count / simulated time / overall run time.
     ``device_label`` names that device in the CSV and defaults to the name of the resolved
@@ -86,7 +86,7 @@ def run_md_eval(init_configs: list,
                 logger.info(f"{out_trj_name} already exists, skipping...")
                 continue
 
-            step_times = [] if csv_dir is not None else None
+            step_times = [] if md_csv_dir is not None else None
 
             trajectory = get_trajectory_with_ase(init_config,
                                                  model_name,
@@ -103,15 +103,14 @@ def run_md_eval(init_configs: list,
                                                  fair_chem_setting=fair_chem_setting)
             end_time = time()
             md_time = end_time - start_time
-            steps = float(md_config.fs / md_config.dt)
             logger.info(f"Ran MD trajectory '{traj_name}' in {md_time:.4f}s, with an average step time of {float(md_time) / steps}...")
 
             # the step times are only recorded for a run that actually ran, so an empty list
             # means the trajectory was reused and there is nothing to benchmark
-            if step_times:
-                save_md_run_csv(f"{csv_dir}/md/{traj_name}.csv",
+            if step_times is not None and len(step_times) > 0:
+                save_md_run_csv(f"{md_csv_dir}/{traj_name}.csv",
                                 step_times,
-                                md_config.dt,
+                                md_config,
                                 md_time,
                                 device=device_label,
                                 calculator=MD_CALCULATOR)
@@ -314,7 +313,7 @@ if __name__ == "__main__":
                                    formatted_model_name,
                                    formatted_system_name,
                                    traj_dir=traj_dir,
-                                   csv_dir=csv_dir,
+                                   md_csv_dir=md_csv_dir,
                                    model_dir=model_dir,
                                    constraint=constraint,
                                    enable_cueq=enable_cueq,

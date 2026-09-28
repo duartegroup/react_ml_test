@@ -637,7 +637,7 @@ def load_model_calculator(model_name: str,
                           fair_chem_task: str = None,
                           fair_chem_setting: str = None):
     """
-    Flexible model loader for different types of model based on model_name (i.e. ACE models/ MACE models / ANI models / transformer models etc.)
+    Flexible model loader for different types of model based on model_name (i.e. ACE models/ MACE models / ANI models / Meta FAIR Chem models etc.)
 
     ``device`` is resolved first (see ``resolve_cuda_device``), so the default 'cuda:0' -
     and any 'cuda:N' that is not present on this machine - falls back to 'cpu'.

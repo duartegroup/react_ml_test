@@ -117,7 +117,7 @@ def get_trajectory_with_ase(init_config: ase.Atoms,
 
 def save_md_run_csv(csv_fpath: str,
                     step_times: list,
-                    dt: float,
+                    md_config: MDSettings,
                     run_time_s: float,
                     device: str,
                     calculator: str = "ASE"):
@@ -138,15 +138,13 @@ def save_md_run_csv(csv_fpath: str,
         total_simulation_time_ps,0.5000
         total_run_time_s,12.400
 
-    The times are microseconds-resolution seconds, so a fast step is not rounded away.
-
     Note that the simulated time comes from the steps actually taken and the time step, as
     ASE runs ``fs`` steps rather than ``fs / dt`` - it is therefore not the ``fs / PS``
     figure the trajectory name carries.
 
     :param csv_fpath: path of the CSV to write (its directory must exist).
     :param step_times: wall time (s) of every step taken, in order.
-    :param dt: integration time step (fs).
+    :param md_config: MDSettings object used for the MD run.
     :param run_time_s: overall wall time (s) of the run, including loading the model.
     :param device: compute device the run used, e.g. 'CPU' (see compute_device_label).
     :param calculator: MD calculator/engine that was used.
@@ -167,7 +165,7 @@ def save_md_run_csv(csv_fpath: str,
         writer.writerow(['mean_step_time_s', f"{mean_step_time:.6f}"])
         writer.writerow(['total_steps', total_steps])
         # the steps actually taken, at the time step used (fs -> ps)
-        writer.writerow(['total_simulation_time_ps', f"{total_steps * dt / PS:.4f}"])
+        writer.writerow(['total_simulation_time_ps', f"{md_config.fs / PS:.4f}"])
         writer.writerow(['total_run_time_s', f"{run_time_s:.3f}"])
 
     logger.info(f"Saved MD benchmark CSV to {csv_fpath}")
