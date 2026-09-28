@@ -103,7 +103,6 @@ def run_md_eval(init_configs: list,
                                                  fair_chem_setting=fair_chem_setting)
             end_time = time()
             md_time = end_time - start_time
-            steps = float(md_config.fs / md_config.dt)
             logger.info(f"Ran MD trajectory '{traj_name}' in {md_time:.4f}s, with an average step time of {float(md_time) / steps}...")
 
             # the step times are only recorded for a run that actually ran, so an empty list
@@ -111,7 +110,7 @@ def run_md_eval(init_configs: list,
             if step_times:
                 save_md_run_csv(f"{csv_dir}/md/{traj_name}.csv",
                                 step_times,
-                                md_config.dt,
+                                md_config,
                                 md_time,
                                 device=device_label,
                                 calculator=MD_CALCULATOR)

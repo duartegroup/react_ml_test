@@ -131,7 +131,7 @@ To run this for the other systems, use `inputs/irc/anthracene_DA_IRC_barrier.yam
 
 ### 3. TS Optimisation + dynamics:
 
-
+<img src="" width="45%"> <img src="" width="45%">
 
 E.g. for fine-tuned model TS optimisation in vacuum and dynamics for CPD + MVK DA system:
 

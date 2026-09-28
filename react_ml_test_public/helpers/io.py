@@ -597,6 +597,22 @@ def _jit_load_on_device(device: str):
         torch.jit.load = original_jit_load
 
 
+def _cueq_versions() -> Dict[str, str]:
+    """The version of every cuequivariance package installed, by distribution name.
+
+    The packages are separate distributions but one library, released in lockstep and
+    calling into each other - the torch layer reaches ``SegmentedPolynomial`` through the
+    core - so the set is only usable when they share a version. The CUDA kernel wheels are
+    named per CUDA build (``cuequivariance-ops-torch-cu11`` / ``-cu12``), hence matching on
+    the prefix rather than listing names.
+    """
+    from importlib.metadata import distributions
+
+    return {name: dist.version
+            for dist in distributions()
+            if (name := dist.metadata["Name"] or "").lower().startswith("cuequivariance")}
+
+
 def _cueq_setup_hint() -> str:
     """Say what cuEquivariance needs that this environment does not have.
 
@@ -610,7 +626,8 @@ def _cueq_setup_hint() -> str:
         from importlib.metadata import PackageNotFoundError, requires, version
 
         # mace-torch declares its cueq requirement on the 'cueq' extra, e.g.
-        # 'cuequivariance-torch>=0.2.0; extra == "cueq"'
+        # 'cuequivariance-torch>=0.2.0; extra == "cueq"'. That pin is a floor, not a
+        # guarantee: it is loose enough to install a set the mace code cannot drive.
         wants = [requirement.split(";")[0].strip()
                  for requirement in requires("mace-torch") or []
                  if requirement.split()[0].lower().startswith("cuequivariance-torch")]
@@ -619,12 +636,24 @@ def _cueq_setup_hint() -> str:
             have = f"installed cuequivariance-torch is {version('cuequivariance-torch')}."
         except PackageNotFoundError:
             have = "cuequivariance-torch is not installed."
+
+        # the failure that reports itself worst - a mixed set raises an AttributeError
+        # naming a class the core never had, which says nothing about the versions. The
+        # core lagging behind the torch layer is how this usually goes.
+        installed = _cueq_versions()
+        if len(set(installed.values())) > 1:
+            shows = ", ".join(f"{name} {dist_version}"
+                              for name, dist_version in sorted(installed.items()))
+            skew = (f"The cuequivariance packages must all be one version, but this "
+                    f"environment has {shows} - that mismatch is the cause. ")
+        else:
+            skew = ""
     except Exception:
         return ""
 
     return (f"cuEquivariance needs mace-torch's cueq extras installed, matching the mace "
-            f"version and this machine's CUDA build ({want} {have}) and a CUDA GPU - fix the "
-            f"extras, or set enable_cueq: false to run without the acceleration.")
+            f"version and this machine's CUDA build ({want} {have}) and a CUDA GPU. {skew}"
+            f"Fix the extras, or set enable_cueq: false to run without the acceleration.")
 
 
 def load_model_calculator(model_name: str,

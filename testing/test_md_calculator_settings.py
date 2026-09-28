@@ -227,6 +227,43 @@ class TestCueqFailuresAreExplained:
         assert "mace-torch asks for cuequivariance-torch" in message
         assert "installed cuequivariance-torch is" in message
 
+    # the cluster env of 2026-09-24: core 8 minors behind the torch layer that calls it
+    MIXED_SET = {"cuequivariance": "0.1.0",
+                 "cuequivariance-torch": "0.12.0",
+                 "cuequivariance-ops-torch-cu12": "0.1.0"}
+
+    def _cueq_warning(self, monkeypatch, caplog, installed):
+        """The cueq warning, with the reported package set stubbed."""
+        from react_ml_test_public.helpers import io as rmlt_io
+
+        pytest.importorskip("mace")
+        monkeypatch.setattr(rmlt_io, "_cueq_versions", lambda: installed)
+        self._stub_mace_calculator(monkeypatch, cueq_error=self.CUEQ_ERROR)
+
+        with caplog.at_level(logging.WARNING):
+            load_model_calculator(self.MODEL_NAME, device="cpu", enable_cueq=True)
+
+        return [record.message for record in caplog.records
+                if "cuEquivariance" in record.message][0]
+
+    def test_a_mixed_cuequivariance_set_is_called_out(self, monkeypatch, caplog):
+        """A set at mixed versions fails as an AttributeError naming a class the core
+        never had, so the hint has to say the versions are the problem."""
+        message = self._cueq_warning(monkeypatch, caplog, self.MIXED_SET)
+
+        assert "must all be one version" in message
+        for name, dist_version in self.MIXED_SET.items():
+            assert f"{name} {dist_version}" in message
+
+    def test_a_matched_set_is_not_called_mixed(self, monkeypatch, caplog):
+        """An installed set that is in step gets the generic advice, not a false alarm."""
+        matched = {name: "0.12.0" for name in self.MIXED_SET}
+
+        message = self._cueq_warning(monkeypatch, caplog, matched)
+
+        assert "must all be one version" not in message
+        assert "cueq extras" in message
+
     def test_cueq_is_used_when_it_loads(self, monkeypatch, caplog):
         built = self._stub_mace_calculator(monkeypatch)
 
