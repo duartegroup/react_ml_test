@@ -148,6 +148,10 @@ Then, run: `rmlt run-mlip-md inputs/md/CPD_MVK_DA_dynamics_vac.yaml`.
 
 This will take the output optimised TS in vacuum from 1. and run 10 1ps dynamics runs, with the trajectories output to `out/trj/`.
 
+Unlike the other example scripts, long MD runs are worth checkpointing: setting `save_md_checkpoints: true` in the input YAML writes a resumable checkpoint per run under `out/md_checkpoints`, every `checkpoint_every` ps (10 ps by default), holding the integration time step, the thermostat state, the step reached, the RNG state and the configuration - momenta included. Re-submitting the same input with `load_md_checkpoint: true` then carries every run on from its last checkpoint instead of starting it over, which is what a job that hit its SLURM time limit wants; the trajectory each run had already written is continued rather than replaced. Naming one checkpoint's path instead resumes just that run from it.
+
+Each stretch of a run keeps its own benchmark CSV under `out/csv/md`, so a resume never overwrites the timings of the stretch before it: the first stretch writes `<trajectory name>.csv` and each one after it `<trajectory name>_contd_1.csv`, `_contd_2.csv` and so on, holding the steps that stretch took. They are refreshed every `checkpoint_every` ps rather than only at the end of a run, so a job that is killed still leaves the timings of the steps it managed.
+
 #### 3. Analysis
 
 To analyse the output trajectories, we then run:

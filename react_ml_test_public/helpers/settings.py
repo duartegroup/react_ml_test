@@ -122,6 +122,11 @@ GEOM_OPT_DIR = f"{OUT_DIR}/geom_opt"
 VIB_DIR = f"{OUT_DIR}/vib"
 PLOT_DIR = f"{OUT_DIR}/plt"
 CSV_DIR = f"{OUT_DIR}/csv"
+MD_CHECKPOINT_DIR = f"{OUT_DIR}/md_checkpoints"
+
+# interval between MD checkpoint writes, in ps, when a run does not ask for another one (see
+# helpers.dynamics.write_md_checkpoint)
+DEFAULT_CHECKPOINT_EVERY_PS = 10
 NPZ_DIR = f"{OUT_DIR}/npz"
 SAMPLES_OUT_DIR = f"{OUT_DIR}/samples"
 DESCRIPTORS_DIR = f"{OUT_DIR}/descriptors"
@@ -222,6 +227,21 @@ def resolve_csv_dir(out_dir: str = None) -> str:
     :return: the CSV output directory.
     """
     return f"{resolve_out_root(out_dir)}/csv"
+
+
+def resolve_md_checkpoint_dir(out_dir: str = None) -> str:
+    """
+    Resolve the MD checkpoint output directory under an output root directory.
+
+    Checkpoints go under ``<out_dir>/md_checkpoints`` - matching the ``MD_CHECKPOINT_DIR``
+    layout the default ``OUT_DIR`` gives - so a YAML that sets ``out_dir`` (e.g. for
+    run_mlip_md.py) writes them alongside the rest of that run's outputs (see
+    ``resolve_out_root``).
+
+    :param out_dir: output root directory, or None to use OUT_DIR.
+    :return: the MD checkpoint output directory.
+    """
+    return f"{resolve_out_root(out_dir)}/md_checkpoints"
 
 
 def resolve_data_path(fpath: str, data_dir: str = None) -> str:

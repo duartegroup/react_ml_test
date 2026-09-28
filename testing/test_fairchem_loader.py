@@ -168,7 +168,7 @@ class TestTheMdPathForwardsTheFairchemSettings:
     def test_run_md_eval_forwards_them(self, tmp_path, reported_to_loader):
         from ase.build import molecule
 
-        from react_ml_test_public.scripts.run_mlip_md import run_md_eval
+        from react_ml_test_public.helpers.dynamics import run_md_eval
 
         traj_dir = tmp_path / "trj"
         traj_dir.mkdir()

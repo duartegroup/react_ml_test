@@ -21,6 +21,7 @@ from react_ml_test_public.helpers import inputs as rmlt_inputs
 from react_ml_test_public.helpers.settings import (
     CSV_DIR,
     DATA_DIR,
+    DEFAULT_CHECKPOINT_EVERY_PS,
     OUT_DIR,
     TRAJ_DIR,
     resolve_csv_dir,
@@ -144,4 +145,67 @@ init_configs_fpath: "pbc/nope.xyz"
 """ + BASE_BODY)
 
         with pytest.raises(ValueError, match="init_configs_fpath not found"):
+            rmlt_inputs.resolve_mlip_md_yaml(yaml_fpath)
+
+
+class TestMlipMdCheckpointFields:
+    """The three MD checkpoint fields, and their defaults."""
+
+    def test_they_default_to_off_at_ten_ps(self, tmp_path):
+        yaml_fpath = _write_yaml(tmp_path, BASE_BODY)
+        resolved = rmlt_inputs.resolve_mlip_md_yaml(yaml_fpath)
+
+        assert resolved["save_md_checkpoints"] is False
+        assert resolved["load_md_checkpoint"] is False
+        assert resolved["checkpoint_every"] == DEFAULT_CHECKPOINT_EVERY_PS == 10
+
+    def test_the_checkpoint_dir_follows_out_dir(self, tmp_path):
+        yaml_fpath = _write_yaml(tmp_path, BASE_BODY)
+        assert rmlt_inputs.resolve_mlip_md_yaml(yaml_fpath)["md_checkpoint_dir"] == (
+            f"{OUT_DIR}/md_checkpoints")
+
+        yaml_fpath = _write_yaml(tmp_path, f'out_dir: "{tmp_path}/out"\n' + BASE_BODY)
+        assert rmlt_inputs.resolve_mlip_md_yaml(yaml_fpath)["md_checkpoint_dir"] == (
+            f"{tmp_path}/out/md_checkpoints")
+
+    def test_saving_and_resuming_every_run_is_a_switch(self, tmp_path):
+        yaml_fpath = _write_yaml(tmp_path, """
+save_md_checkpoints: true
+load_md_checkpoint: true
+checkpoint_every: 5
+""" + BASE_BODY)
+        resolved = rmlt_inputs.resolve_mlip_md_yaml(yaml_fpath)
+
+        assert resolved["save_md_checkpoints"] is True
+        assert resolved["load_md_checkpoint"] is True
+        assert resolved["checkpoint_every"] == 5
+
+    def test_a_checkpoint_path_is_kept_as_one(self, tmp_path):
+        """load_md_checkpoint resumes a single run from a file when it is not a switch."""
+        yaml_fpath = _write_yaml(tmp_path, f"""
+load_md_checkpoint: "{tmp_path}/cp/run_checkpoint.yaml"
+""" + BASE_BODY)
+        resolved = rmlt_inputs.resolve_mlip_md_yaml(yaml_fpath)
+
+        assert resolved["load_md_checkpoint"] == f"{tmp_path}/cp/run_checkpoint.yaml"
+
+    def test_a_quoted_switch_is_still_a_switch(self, tmp_path):
+        yaml_fpath = _write_yaml(tmp_path, 'load_md_checkpoint: "true"\n' + BASE_BODY)
+
+        assert rmlt_inputs.resolve_mlip_md_yaml(yaml_fpath)["load_md_checkpoint"] is True
+
+    def test_a_checkpoint_path_may_reference_the_environment(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CHECKPOINT_DIR", f"{tmp_path}/cp")
+        yaml_fpath = _write_yaml(tmp_path, """
+load_md_checkpoint: "$CHECKPOINT_DIR/run_checkpoint.yaml"
+""" + BASE_BODY)
+
+        assert rmlt_inputs.resolve_mlip_md_yaml(yaml_fpath)["load_md_checkpoint"] == (
+            f"{tmp_path}/cp/run_checkpoint.yaml")
+
+    @pytest.mark.parametrize("value", ["0", "-5", "ten"])
+    def test_an_interval_that_is_not_positive_number_of_ps_is_reported(self, tmp_path, value):
+        yaml_fpath = _write_yaml(tmp_path, f"checkpoint_every: {value}\n" + BASE_BODY)
+
+        with pytest.raises(ValueError, match="checkpoint_every"):
             rmlt_inputs.resolve_mlip_md_yaml(yaml_fpath)

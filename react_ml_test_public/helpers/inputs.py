@@ -35,6 +35,7 @@ from react_ml_test_public.helpers.io import (
 )
 from react_ml_test_public.helpers.settings import (
     DATA_DIR,
+    DEFAULT_CHECKPOINT_EVERY_PS,
     DFT_DIR,
     KCAL_PER_MOL,
     KJ_PER_MOL,
@@ -47,6 +48,7 @@ from react_ml_test_public.helpers.settings import (
     expand_env_vars,
     resolve_csv_dir,
     resolve_data_path,
+    resolve_md_checkpoint_dir,
     resolve_model_dir,
     resolve_out_dirs,
     resolve_out_root,
@@ -613,7 +615,8 @@ def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
     ``init_configs_fpath`` that does not resolve from the current working directory is taken to
     be relative to ``data_dir``, trajectories are written under ``out_dir`` (see
     ``resolve_traj_dir``, i.e. ``<out_dir>/trj``) and the per-run MD benchmark CSVs under it
-    too (see ``resolve_csv_dir``, i.e. ``<out_dir>/csv``).
+    too (see ``resolve_csv_dir``, i.e. ``<out_dir>/csv``). MD checkpoints go under
+    ``<out_dir>/md_checkpoints`` (see ``resolve_md_checkpoint_dir``).
     """
     input_config = _load_yaml_config(input_yaml_fpath, parser)
 
@@ -641,6 +644,7 @@ def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
     out_dir = resolve_out_root(input_config.get("out_dir", OUT_DIR))
     traj_dir = resolve_traj_dir(out_dir)
     csv_dir = resolve_csv_dir(out_dir)
+    md_checkpoint_dir = resolve_md_checkpoint_dir(out_dir)
     model_dir = resolve_model_dir(input_config.get("model_dir", None))
 
     # ===== system / starting configs =====
@@ -698,11 +702,35 @@ def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
     fair_chem_setting = input_config.get("fair_chem_setting", None)
     fair_chem_setting = str(fair_chem_setting) if fair_chem_setting is not None else None
 
+    # MD checkpoints (see helpers.dynamics): save_md_checkpoints writes a resumable checkpoint
+    # YAML per run under <out_dir>/md_checkpoints, every checkpoint_every ps of simulated
+    # time. load_md_checkpoint is either a switch - true resumes every run from its own
+    # checkpoint, so a job that was cut short picks each run up where it stopped - or the
+    # path of a single checkpoint to resume one run from.
+    save_md_checkpoints = _as_bool(input_config.get("save_md_checkpoints", False), default=False)
+    load_md_checkpoint = input_config.get("load_md_checkpoint", False)
+    if isinstance(load_md_checkpoint, str) and load_md_checkpoint.strip().lower() not in (
+            "true", "false", "yes", "no", "1", "0"):
+        # not one of the boolean spellings _as_bool accepts, so this is a checkpoint path
+        load_md_checkpoint = expand_env_vars(load_md_checkpoint)
+    else:
+        load_md_checkpoint = _as_bool(load_md_checkpoint, default=False)
+    try:
+        checkpoint_every = float(input_config.get("checkpoint_every",
+                                                  DEFAULT_CHECKPOINT_EVERY_PS))
+    except (TypeError, ValueError):
+        _error(parser, "'checkpoint_every' must be a number of ps between checkpoint "
+                       "writes, e.g. 10.")
+    if checkpoint_every <= 0:
+        _error(parser, "'checkpoint_every' must be a positive number of ps between "
+                       "checkpoint writes.")
+
     return {
         "data_dir": data_dir,
         "out_dir": out_dir,
         "traj_dir": traj_dir,
         "csv_dir": csv_dir,
+        "md_checkpoint_dir": md_checkpoint_dir,
         "init_configs_fpath": init_configs_fpath,
         "system_name": system_name,
         "include_solvent": include_solvent,
@@ -729,6 +757,9 @@ def resolve_mlip_md_yaml(input_yaml_fpath: str, parser=None):
         "cuda_device": cuda_device,
         "fair_chem_task": fair_chem_task,
         "fair_chem_setting": fair_chem_setting,
+        "save_md_checkpoints": save_md_checkpoints,
+        "load_md_checkpoint": load_md_checkpoint,
+        "checkpoint_every": checkpoint_every,
     }
 
 

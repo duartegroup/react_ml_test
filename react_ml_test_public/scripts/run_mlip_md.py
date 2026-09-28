@@ -6,119 +6,13 @@ Script for evaluating the performance of foundation models on a specified test s
 import argparse
 import os
 
-# from ase.constraints.constraint import IndexedConstraint
-from time import time
-
-from ase.constraints import FixAtoms
 from ase.io import read
 
 from react_ml_test_public.helpers import inputs as rmlt_inputs
-from react_ml_test_public.helpers.dynamics import get_trajectory_with_ase, save_md_run_csv
-from react_ml_test_public.helpers.io import (
-    check_cuda_setup,
-    compute_device_label,
-    get_name_from_path,
-    load_model_calculator,
-)
+from react_ml_test_public.helpers.dynamics import run_md_eval
+from react_ml_test_public.helpers.io import check_cuda_setup
 from react_ml_test_public.helpers.logging import logger
-from react_ml_test_public.helpers.settings import (
-    CPD_MVK_DA_DATA_DIR,
-    DA_PAPER_DATA_DIR,
-    DATA_DIR,
-    MD_INPUT_DIR,
-    MODELS,
-    OPT_DIR,
-    PS,
-    TRAJ_DIR,
-    MDSettings,
-)
-
-# the MD engine the trajectories below are run with: get_trajectory_with_ase, i.e. ASE. Only
-# ASE is wired up here, so this is also what the benchmark CSVs record as the calculator.
-MD_CALCULATOR = 'ASE'
-
-
-def run_md_eval(init_configs: list,
-                md_config: MDSettings,
-                md_runs_per_config: int,
-                model_name: str,
-                formatted_model_name: str,
-                system_name: str,
-                traj_dir: str = TRAJ_DIR,
-                md_csv_dir: str = None,
-                model_dir: str = None,
-                constraint: str = None,# IndexedConstraint = None,
-                enable_cueq: bool = False,
-                override_saved: bool = False,
-                cuda_device: str = "cuda:0",
-                device_label: str = None,
-                fair_chem_task: str = None,
-                fair_chem_setting: str = None):
-
-    """Run every MD trajectory for one model, and write a benchmark CSV for each of them.
-
-    With ``md_csv_dir`` set, one CSV per run is saved under ``<md_csv_dir>/md`` (see
-    ``save_md_run_csv``): the device the run used, the calculator, the wall time of every
-    step, the mean step time, and the step count / simulated time / overall run time.
-    ``device_label`` names that device in the CSV and defaults to the name of the resolved
-    ``cuda_device`` (see ``compute_device_label``). ``enable_cueq``, ``model_dir`` and the
-    FairChem pair ``fair_chem_task`` / ``fair_chem_setting`` are forwarded to every run's
-    calculator.
-    """
-
-    # the CSV records the device by name (e.g. 'NVIDIA H100 80GB HBM3'), once for the run
-    if csv_dir is not None and device_label is None:
-        device_label = compute_device_label(cuda_device)
-
-    trajectories = []
-    for i in range(len(init_configs)):
-
-        init_config = init_configs[i].copy()
-
-        for j in range(md_runs_per_config):
-            logger.info(f"Running MD trajectory for init config {i + 1}, run number {j}...")
-
-            start_time = time()
-            traj_name = f'{system_name}_{formatted_model_name}_{md_config.temp}K_{md_config.fs / PS}ps_config_{i}_run_{j}'
-
-            out_trj_name = f"{traj_dir}/{traj_name}_traj.xyz"
-            if os.path.exists(out_trj_name) and not override_saved:
-                logger.info(f"{out_trj_name} already exists, skipping...")
-                continue
-
-            step_times = [] if md_csv_dir is not None else None
-
-            trajectory = get_trajectory_with_ase(init_config,
-                                                 model_name,
-                                                 md_config,
-                                                 traj_name,
-                                                 out_dir=traj_dir,
-                                                 constraint=constraint,
-                                                 cuda_device=cuda_device,
-                                                 override_cache=override_saved,
-                                                 model_dir=model_dir,
-                                                 enable_cueq=enable_cueq,
-                                                 step_times=step_times,
-                                                 fair_chem_task=fair_chem_task,
-                                                 fair_chem_setting=fair_chem_setting)
-            end_time = time()
-            md_time = end_time - start_time
-            logger.info(f"Ran MD trajectory '{traj_name}' in {md_time:.4f}s, with an average step time of {float(md_time) / steps}...")
-
-            # the step times are only recorded for a run that actually ran, so an empty list
-            # means the trajectory was reused and there is nothing to benchmark
-            if step_times is not None and len(step_times) > 0:
-                save_md_run_csv(f"{md_csv_dir}/{traj_name}.csv",
-                                step_times,
-                                md_config,
-                                md_time,
-                                device=device_label,
-                                calculator=MD_CALCULATOR)
-
-            trajectories.append(trajectory)
-
-    return trajectories
-
+from react_ml_test_public.helpers.settings import OPT_DIR, MDSettings
 
 if __name__ == "__main__":
 
@@ -173,6 +67,13 @@ if __name__ == "__main__":
         fair_chem_setting:    # FairChem only: e.g. "turbo", recommended for MD (fairchem's
                               # own default is "default").
         override_saved:       # re-run MD even if a saved trajectory already exists.
+        save_md_checkpoints:   # write a resumable checkpoint YAML per run under
+                              # <out_dir>/md_checkpoints, every checkpoint_every ps
+                              # (default false).
+        load_md_checkpoint:   # true: carry every run on from its own checkpoint, each
+                              # taking the steps it has left of fs; or the path of one
+                              # checkpoint, to carry a single run on from it (default false).
+        checkpoint_every:     # ps of simulated time between checkpoint writes (default 10).
         cuda_device:          # GPU device for the MLIP calculators (default "cuda:0",
                               # falls back to "cpu" if that device is not found).
 
@@ -180,6 +81,21 @@ if __name__ == "__main__":
     (one per MD run, named after the trajectory): the compute device, the calculator, the wall
     time of every step, the mean step time, the number of steps run, the simulated time they
     amount to and the overall run time (see helpers.dynamics.save_md_run_csv).
+
+    With save_md_checkpoints, each run also writes a checkpoint YAML under
+    <out_dir>/md_checkpoints, every checkpoint_every ps, holding the state a run is continued
+    from (see helpers.dynamics.write_md_checkpoint). Running the same input again with
+    load_md_checkpoint then carries each run on from its last checkpoint rather than starting
+    it over - the intended use being a job that hit its time limit.
+
+    A run carried on like that does not overwrite the CSVs of the stretches before it: the
+    first stretch writes <traj_name>.csv and each later one <traj_name>_contd_<n>.csv, each
+    naming the steps it covers, so the whole run's benchmark is the set of them (see
+    helpers.dynamics._md_csv_fpath). Each is refreshed every checkpoint_every ps, so a stretch
+    that is itself cut short keeps the timings it managed.
+
+    This script is only the command line around the run: the runs themselves, their naming and
+    their per-stretch outputs are helpers.dynamics.run_md_eval.
 
     formatted_model_names are built in the script: fine-tuned entries of this training set get
     a compact "<label>_<system_ft_name>_<n>_config_<energy><sample_str>ft" label, other entries
@@ -243,6 +159,10 @@ if __name__ == "__main__":
     cuda_device = resolved["cuda_device"]
     fair_chem_task = resolved["fair_chem_task"]
     fair_chem_setting = resolved["fair_chem_setting"]
+    save_md_checkpoints = resolved["save_md_checkpoints"]
+    load_md_checkpoint = resolved["load_md_checkpoint"]
+    checkpoint_every = resolved["checkpoint_every"]
+    md_checkpoint_dir = resolved["md_checkpoint_dir"]
     del resolved
 
     # resolve the requested device (i.e. fall back to 'cpu' if the GPU is not available)
@@ -272,8 +192,12 @@ if __name__ == "__main__":
     logger.info(f"Reading configs relative to data_dir: {data_dir}, "
                 f"writing trajectories under out_dir: {out_dir} (i.e. {traj_dir})")
     os.makedirs(traj_dir, exist_ok=True)
-    # one benchmark CSV per run is written here (see run_md_eval)
+    # one benchmark CSV per run is written here (see helpers.dynamics.run_md_eval)
     os.makedirs(md_csv_dir, exist_ok=True)
+    # checkpoints are only written when they are asked for, so their directory is only made
+    # then (a checkpoint is still read from wherever load_md_checkpoint points)
+    if save_md_checkpoints:
+        os.makedirs(md_checkpoint_dir, exist_ok=True)
 
     if init_configs_fpath is None:
         if include_solvent:
@@ -320,4 +244,8 @@ if __name__ == "__main__":
                                    override_saved=override_saved,
                                    cuda_device=cuda_device,
                                    fair_chem_task=fair_chem_task,
-                                   fair_chem_setting=fair_chem_setting)
+                                   fair_chem_setting=fair_chem_setting,
+                                   save_md_checkpoints=save_md_checkpoints,
+                                   load_md_checkpoint=load_md_checkpoint,
+                                   checkpoint_every=checkpoint_every,
+                                   md_checkpoint_dir=md_checkpoint_dir)

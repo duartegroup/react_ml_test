@@ -38,3 +38,12 @@ omol_energy_str: "energy_"
 enable_cueq: false
 override_saved: false
 cuda_device: "cuda:0"
+
+# === 5. MD CHECKPOINTS (optional) ===
+# save_md_checkpoints writes a resumable checkpoint per run under out/md_checkpoints, every
+# checkpoint_every ps of simulated time, and load_md_checkpoint carries each run on from its
+# checkpoint instead of starting it over - e.g. re-submitting a job that hit its time limit.
+# An explicit path resumes a single run from that one checkpoint.
+save_md_checkpoints: false
+load_md_checkpoint: false     # or e.g. "out/md_checkpoints/<traj name>_checkpoint.yaml"
+checkpoint_every: 10          # ps
