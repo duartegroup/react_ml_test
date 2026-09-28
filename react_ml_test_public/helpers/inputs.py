@@ -11,6 +11,7 @@ function in this module that takes in and processes the YAML for that script:
     resolve_mlip_md_yaml(...)                      -> run_mlip_md.py
     resolve_trajectory_analysis_yaml(...)          -> run_trajectory_analysis.py
     resolve_save_dft_inputs_yaml(...)              -> save_dft_inputs_from_xyz.py
+    resolve_check_orca_output_yaml(...)            -> check_orca_output.py
 
 Each function performs the shared file checks / parsing / ``${var}`` substitution
 (via ``_load_yaml_config``) followed by that script's own field resolution and
@@ -1055,4 +1056,35 @@ def resolve_save_dft_inputs_yaml(input_yaml_fpath: str, parser=None):
         "extra_name_tag": extra_name_tag,
         "box_size": box_size,
         "incar_settings": incar_settings,
+    }
+
+
+def resolve_check_orca_output_yaml(input_yaml_fpath: str, parser=None):
+    """Load + process the input YAML for check_orca_output.py.
+
+    The YAML names the set of ORCA outputs to report on: ``work_dir``, the directory searched
+    recursively, and ``input_name``, the stem the output files are named after - every
+    ``<work_dir>/**/*<input_name>_*.out`` is read and reported as a success or a failure by
+    whether it says ORCA terminated normally (see ``io.check_orca_outputs``). Both fields are
+    required, and both are returned as the script's ``__main__`` declares them.
+
+    ``work_dir`` may reference environment variables (e.g. ``"$DATA/out/dft/sp"``), which is
+    how a location only known at run time is spelled, and is not checked for existence: a
+    directory holding no outputs yet is a set of zero runs, not a mistake.
+    """
+    input_config = _load_yaml_config(input_yaml_fpath, parser)
+
+    def _need(key):
+        value = input_config.get(key, None)
+        if value is None:
+            _error(parser, f"Missing required field '{key}' in input YAML.")
+        return value
+
+    # ===== ORCA OUTPUT SET TO CHECK =====
+    work_dir = expand_env_vars(str(_need("work_dir")))
+    input_name = str(_need("input_name"))
+
+    return {
+        "work_dir": work_dir,
+        "input_name": input_name,
     }
