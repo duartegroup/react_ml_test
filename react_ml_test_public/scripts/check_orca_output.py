@@ -14,12 +14,12 @@ if __name__ == "__main__":
 
     The path to the input YAML file is given as a single command-line argument:
 
-        rmlt check-orca-output inputs/dft/check_orca_output.yaml
+        rmlt check-orca-output inputs/dft/check_orca_output_guajadial_eg.yaml
 
     (or equivalently: python -m react_ml_test_public.scripts.check_orca_output
-    inputs/dft/check_orca_output.yaml)
+    inputs/dft/check_orca_output_guajadial_eg.yaml)
 
-    Input YAML format (see inputs/dft/check_orca_output.yaml for an example):
+    Input YAML format (see inputs/dft/check_orca_output_guajadial_eg.yaml for an example):
 
     Fields (path fields may reference environment variables, e.g. "$DATA/out/dft/sp"):
         work_dir:             # directory searched, recursively, for ORCA output files.
@@ -36,12 +36,12 @@ if __name__ == "__main__":
         description="Check the ORCA outputs under a directory for runs that did not "
                     "terminate normally, driven by an input YAML config file (format "
                     "described above).",
-        epilog="Example: rmlt check-orca-output inputs/dft/check_orca_output.yaml",
+        epilog="Example: rmlt check-orca-output inputs/dft/check_orca_output_guajadial_eg.yaml",
     )
     parser.add_argument(
         "input_yaml",
         help="Path to the input YAML config file "
-             "(e.g. inputs/dft/check_orca_output.yaml).",
+             "(e.g. inputs/dft/check_orca_output_guajadial_eg.yaml).",
     )
     args = parser.parse_args()
 

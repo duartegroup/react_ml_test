@@ -1,0 +1,14 @@
+# save_orca_out_to_xyz.py input YAML - save a DFT single-point set's ORCA outputs as one
+# .npz + extended .xyz.
+
+# Run with:
+#   rmlt save-orca-out-to-xyz inputs/dft/save_orca_out_to_xyz_guajadial_eg.yaml
+
+# Paths are relative to the repository root, or absolute; "$VAR" / "${VAR}" references are
+# expanded from the environment, e.g. work_dir: "$DATA/out/dft/sp" on the cluster.
+
+# === 1. ORCA OUTPUT SET TO SAVE ===
+# every "<work_dir>/**/*<input_name>_*.out" is read, and written as a single .npz plus
+# extended .xyz
+work_dir: "out/dft/sp"
+input_name: "guajadial_DA_test_wB97M_TZVPPD"

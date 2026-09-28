@@ -1,7 +1,7 @@
 # check_orca_output.py input YAML - report on the ORCA outputs of a DFT single-point set.
 
 # Run with:
-#   rmlt check-orca-output inputs/dft/check_orca_output.yaml
+#   rmlt check-orca-output inputs/dft/check_orca_output_guajadial_eg.yaml
 
 # Paths are relative to the repository root, or absolute; "$VAR" / "${VAR}" references are
 # expanded from the environment, e.g. work_dir: "$DATA/out/dft/sp" on the cluster.

@@ -29,7 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # the example YAML the repository ships, and the run it was written for (the settings the
 # script hardcoded before it took one)
-EXAMPLE_YAML = "inputs/dft/check_orca_output.yaml"
+EXAMPLE_YAML = "inputs/dft/check_orca_output_guajadial_eg.yaml"
 EXAMPLE_INPUT_NAME = "guajadial_DA_test_wB97M_TZVPPD"
 
 # a minimal ORCA output that terminated, and one that did not
