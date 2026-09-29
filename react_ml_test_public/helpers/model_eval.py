@@ -402,7 +402,7 @@ def reaction_barrier_comparison(model_names: List[str],
 
         # set all energies relative to reference config
         for dataset in combined_datasets:
-            dataset -= dataset[0]  # all reference themselves
+            dataset -= dataset[0]  # all reference reactant state
 
         # get key reference values
         ref_peak_energy = np.max(combined_datasets[0])

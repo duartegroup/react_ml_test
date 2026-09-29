@@ -199,6 +199,7 @@ This can be run for the other two systems using the provided yaml inputs: `input
 #### 5. `rmlt run-ds-analysis`
 
     - DESCRIPTION: analyse the spread of your dataset about a reaction coordinate, with SOAP descriptors, energy / force distributions etc.
+    - USAGE: Run `rmlt run-ds-analysis inputs/dataset/guajadial_DA_train_subsets.yaml`, which analyses the datasets the YAML lists (their train / valid / test subsets here) against each other and writes the plots to `out/plt/ds_analysis/`. YAML inputs for the other two systems are in `inputs/dataset/`; set `filter_config_type: vacuum` (or `solvated`) in one to analyse only that half of the datasets, and `calc_soap: true` to add the SOAP-descriptor PCA plots (off by default, as it needs `dscribe` and takes a while for a whole dataset).
 
 #### 6. `rmlt save-dft-inputs-from-xyz`
 

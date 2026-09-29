@@ -1,361 +1,147 @@
+"""
+Analyse the spread of one or more datasets about a reaction coordinate.
+
+Plots SOAP-descriptor PCA projections, absolute / relative energy distributions, force
+distributions and the reaction-coordinate (r1 / r2) distributions of each dataset, so
+dataset subsets (e.g. train / valid / test, or vacuum / solvated) can be compared.
+"""
+import argparse
+import os
 from time import time
 
-import numpy as np
-
 import matplotlib.pyplot as plt
-from scipy.stats import gaussian_kde, norm
+import numpy as np
+from scipy.stats import gaussian_kde
 
+from react_ml_test_public.helpers import inputs as rmlt_inputs
 from react_ml_test_public.helpers.descriptors import get_soap_descriptors
 from react_ml_test_public.helpers.dim_red import run_pca
 from react_ml_test_public.helpers.io import (
-    autode_props_parser,
     flexible_ase_read,
     get_ase_atoms_energy,
+    get_ase_atoms_forces,
     get_name_from_path,
-    load_data_cache,
-    load_model_calculator,
-    save_npz_data_cache,
 )
 from react_ml_test_public.helpers.logging import logger
-from react_ml_test_public.helpers.plot import bar_plot, plot_2d
+from react_ml_test_public.helpers.plot import plot_2d
 from react_ml_test_public.helpers.settings import (
-    ANTHRACENE_DA_DATA_DIR,
-    CPD_MVK_DA_DATA_DIR,
-    CSV_DIR,
-    DATASETS_DIR,
     DPI,
-    GRAPH_PES_MODEL_LOADER,
-    GUAJADIAL_DA_DATA_DIR,
-    ISOLATED_ATOMS_DIR,
+    EV,
     KCAL_PER_MOL,
-    MACE_MODEL_LOADER,
     MEV_PER_ATOM,
-    MODEL_DIR,
-    MODELS,
-    NPZ_DIR,
-    PLOT_DIR,
-    SAMPLES_DIR,
-    SAMPLES_OUT_DIR,
     SINGLE_COLUMN_FIG_SIZE,
-    I_Cl_SN2_DATA_DIR,
     PlotSettings,
     eV_to_kcal_mol,
     eV_to_mEV,
 )
-from react_ml_test_public.helpers.utils import (
-    eV_to_meV_per_atom,
-    get_ase_props,
-    natural_sort_key,
-    unflatten_array_by_lengths,
-)
-
-N_CORES = 1
+from react_ml_test_public.helpers.utils import convert_units, get_ase_props
 
 
 if __name__ == "__main__":
-    input_ds_name: str = None
-    include_energies = True
-    include_forces = True
-    custom_xyz_parsers = None
 
+    """Analyse one or more datasets about a reaction coordinate.
 
-    # ===== SELECT DS NAME =====
-    # input_ds_fps = [f"{TRAIN_SUBSETS_DIR}/endo_DA_final_train_clean_vacuum.xyz"]
-    # input_ds_fps = [f"{TRAIN_SUBSETS_DIR}/endo_DA_final_train_clean_react_in_water.xyz"]
-    # input_ds_fps = [f"{TRAIN_SUBSETS_DIR}/endo_DA_final_train_clean.xyz"]
-    # input_ds_fps = [f"{TRAIN_SUBSETS_DIR}/endo_DA_final_valid_clean.xyz"]
-    # input_ds_fps = [f"{TRAIN_SUBSETS_DIR}/endo_DA_final_test_clean.xyz"]
+    The path to the input YAML file is given as a single command-line argument:
 
-    # validation comparison
-    # input_ds_fps = [
-    #                 f"{TRAIN_SUBSETS_DIR}/endo_DA_final_valid_clean.xyz",
-    #                 f"{TRAIN_SUBSETS_DIR}/endo_DA_final_valid_clean_force_filtered.xyz", 
-    #                 # f"{TRAIN_SUBSETS_DIR}/endo_DA_final_train_clean_vac_solv_only.xyz",
-    #                 # f"{TRAIN_SUBSETS_DIR}/endo_DA_valid.xyz"
-    #                 # f"{TRAIN_SUBSETS_DIR}/endo_DA_valid_no_microsolv.xyz",
-    #                 ]
+        rmlt run-ds-analysis inputs/dataset/guajadial_DA_train_subsets.yaml
 
-    # --- unfiltered train, valid test ---
-    # input_ds_fps = [
-    #                 f"{TRAIN_SUBSETS_DIR}/endo_DA_final_train.xyz",
-    #                 f"{TRAIN_SUBSETS_DIR}/endo_DA_final_valid.xyz",
-    #                 f"{TRAIN_SUBSETS_DIR}/endo_DA_final_test_.xyz",
-    #                ]
-    # dataset_labels = ['Train', 'Valid', 'Test']
+    Input YAML format (see inputs/dataset/guajadial_DA_train_subsets.yaml for a full
+    example):
 
-    # train, test, valid comparison
-    # input_ds_fps = [
-    #                 f"{TRAIN_SUBSETS_DIR}/endo_DA_final_train_clean_vac_solv_only_force_filtered.xyz",
-    #                 f"{TRAIN_SUBSETS_DIR}/endo_DA_final_valid_clean_force_filtered.xyz",
-    #                 f"{ENDO_DA_DATA_DIR}/endo_DA_final_test_combined_force_filtered.xyz",
-    #                ]
-    # dataset_labels = ['Train', 'Valid', 'Test']
+    Fields (path fields may reference environment variables, e.g. out_dir: "$DATA/out"):
+        data_dir:              # data root directory for relative dataset / TS paths
+                               # (default DATA_DIR from settings.py).
+        out_dir:               # output root directory, i.e. plots go to <out_dir>/plt
+                               # (default OUT_DIR from settings.py).
+        input_ds_fps:          # list of dataset .xyz files to analyse, plotted alongside
+                               # each other.
+        dataset_labels:        # list of legend labels, one per dataset (defaults to the
+                               # file name of each).
+        custom_xyz_parsers:    # optional per-dataset config-property parsers, one entry
+                               # per dataset, each "orca_props_parser" /
+                               # "autode_props_parser" / "hartree_props_parser" or null
+                               # for the default parsing (default: null for every dataset).
+        filter_config_type:    # only analyse configs of this config_type, i.e. 'vacuum' /
+                               # 'solvated' (default None = no filtering).
+        ts_ref_fpath:          # optional path to the DFT reference TS the reaction-coordinate
+                               # distances are measured from; without it the TS plots and the
+                               # TS-distance histogram are skipped (default None).
+        react_coords:          # list of reactive atom pairs [[i, j], ...] defining the
+                               # r1 / r2 distances.
+        calc_soap:             # whether to calculate SOAP descriptors and plot their PCA
+                               # projections (needs dscribe; default false).
+        test_elements:         # list of element symbols the SOAP descriptors are
+                               # calculated for, e.g. [C, H, O] (default: every element).
+        include_energies:      # whether to calculate / plot energies (default true).
+        include_forces:        # whether to calculate / plot forces (default true).
+        energy_units:          # "meV / atom" or "kcal / mol" (default "meV / atom").
+        save_name:             # base name of the output plots under <out_dir>/plt.
+        plot_2d_xlim:          # optional [lo, hi] r1 (x) plot limits.
+        plot_2d_ylim:          # optional [lo, hi] r2 (y) plot limits.
 
-    # --- level of theory comparison ---
-    # input_ds_fps = [
-    #                 # f"{TRAIN_SUBSETS_DIR}/endo_DA_final_test_clean.xyz",
-    #                 # f"{TRAIN_SUBSETS_DIR}/endo_DA_final_test_clean_PBE_def2-SVP.xyz",
-    #                 # f"{ENDO_DA_DATA_DIR}/endo_DA_neb_gas_wB97M.xyz",
-    #                 # f"{ENDO_DA_DATA_DIR}/endo_DA_neb_gas_PBE_def2-SVP.xyz",
-    #                 f"{ENDO_DA_DATA_DIR}/endo_DA_vac_ace_wB97M.xyz",
-    #                 f"{ENDO_DA_DATA_DIR}/endo_DA_vac_ace_PBE_def2-SVP.xyz"
-    #                 # f"{ENDO_DA_DATA_DIR}/endo_DA_water_ace_wB97M_non_pbc.xyz",
-    #                 # f"{ENDO_DA_DATA_DIR}/endo_DA_water_ace_non_pbc_PBE_def2-SVP.xyz",  # TODO: SOME VALUES MISSING!
-    #                ]
-    # dataset_labels = ['ωB97M-D3BJ/def2-TZVP', 'PBE def2_SVP']
-    # save_name = 'endo_DA_DFT_comparison'
+    Any omitted field is set to None, or the documented default.
+    """
 
-    # --- CPD + MVK DA comparison ---
+    # input YAML config path from a single command-line argument
+    parser = argparse.ArgumentParser(
+        description="Analyse one or more datasets about a reaction coordinate, driven by an "
+                    "input YAML config file (format described above).",
+        epilog="Example: rmlt run-ds-analysis inputs/dataset/guajadial_DA_train_subsets.yaml",
+    )
+    parser.add_argument(
+        "input_yaml",
+        help="Path to the input YAML config file "
+             "(e.g. inputs/dataset/guajadial_DA_train_subsets.yaml).",
+    )
+    args = parser.parse_args()
 
-    # # ts reference
-    # ts_ref_config = flexible_ase_read(f'{CPD_MVK_DA_DATA_DIR}/TS/endo_DA_vac_TS_wB97M.xyz')[0]
-    # react_coords = [(1, 12), (6, 11)]
-    # test_elements = {'C', 'H', 'O'}
+    # load + process the input YAML (see react_ml_test_public/helpers/inputs.py)
+    resolved = rmlt_inputs.resolve_ds_analysis_yaml(args.input_yaml, parser)
 
-    # # input_ds_fps = [
-    # #     f"{ENDO_DA_DATA_DIR}/endo_ace_wB97M_data.xyz",
-    # #     f"{ENDO_DA_DATA_DIR}/endo_in_water_random_data.xyz",
-    # #     f"{ENDO_DA_DATA_DIR}/watertol_ace_wB97M_27_data.xyz",
-    # # ]
-    # # dataset_labels = ['endo_ace_wB97M_data', 'endo_in_water_random_data']
+    # ===== data / output directories =====
+    data_dir = resolved["data_dir"]
+    out_dir = resolved["out_dir"]
+    plot_dir = resolved["plot_dir"]
+    logger.info(f"Using data dir: {data_dir}, out dir: {out_dir} (plots: {plot_dir})...")
 
-    # # filtered train, valid test
-    # input_ds_fps = [
-    #                 f"{CPD_MVK_DA_DATA_DIR}/train/CPD_MVK_DA_train.xyz",
-    #                 f"{CPD_MVK_DA_DATA_DIR}/valid/CPD_MVK_DA_valid.xyz",
-    #                 f"{CPD_MVK_DA_DATA_DIR}/test/CPD_MVK_DA_test.xyz",
-    #                ]
-    # # dataset_labels = ['Train']
-    # dataset_labels = ['Train', 'Valid', 'Test']
-    # save_name = 'CPD_MVK_DA'
+    # ===== datasets to analyse =====
+    input_ds_fps = resolved["input_ds_fps"]
+    dataset_labels = resolved["dataset_labels"]
+    custom_xyz_parsers = resolved["custom_xyz_parsers"]
+    filter_config_type = resolved["filter_config_type"]
 
-    # old vs new test set comparison
-    # input_ds_fps = [
-    #                 # f"{CPD_MVK_DA_DATA_DIR}/test/CPD_MVK_DA_test_PBE.xyz",
-    #                 # f"{CPD_MVK_DA_DATA_DIR}/test/CPD_MVK_DA_test.xyz",
-    #                 # f"{CPD_MVK_DA_DATA_DIR}/test/endo_DA_PBE_combined_test.xyz",
-    #                 f"{CPD_MVK_DA_DATA_DIR}/test/endo_DA_PBE_combined_test_structure_sorted.xyz",
-    #                 # f"{CPD_MVK_DA_DATA_DIR}/test/endo_DA_PBE_combined_test_rerun.xyz",
-    #                 f"{CPD_MVK_DA_DATA_DIR}/test/endo_DA_PBE_combined_test_rerun_structure_sorted.xyz",
-    #                 # f"{CPD_MVK_DA_DATA_DIR}/test/endo_DA_wB97M_combined_test.xyz",
-    #                ]
-    # dataset_labels = [get_name_from_path(ds_fp) for ds_fp in input_ds_fps]
-    # save_name = 'CPD_MVK_DA_pbe_wB97M_test_set_comp'
+    # ===== reaction coordinate reference =====
+    ts_ref_fpath = resolved["ts_ref_fpath"]
+    react_coords = resolved["react_coords"]
+    test_elements = resolved["test_elements"]
 
-    # additional test sets
-    # input_ds_fps = [
-    #     # f"{ENDO_DA_DATA_DIR}/endo_ace_wB97M_nonpca_orca.xyz",
-    #     # f"{ENDO_DA_DATA_DIR}/endo_DA_neb_gas_wB97M.xyz",
-    #     f"{ENDO_DA_DATA_DIR}/endo_DA_neb_water_wB97M.xyz",
-    #     # f"{ENDO_DA_DATA_DIR}/endo_DA_water_ace_wB97M_non_pbc.xyz",
-    # ]
-    # dataset_labels = [get_name_from_path(fp) for fp in input_ds_fps]
-    # # custom_xyz_parsers = [None, None, autode_props_parser, None]
-    # custom_xyz_parsers = [autode_props_parser]
-    # include_forces = False
-    # save_name = 'endo_DA_additional_tests'
+    # ===== what to calculate =====
+    include_energies = resolved["include_energies"]
+    include_forces = resolved["include_forces"]
+    energy_units = resolved["energy_units"]
+    calc_soap = resolved["calc_soap"]
 
-    # selected ft model
-    # rep_num, n = 1, 42
-    # input_ds_fps = [
-    #     # f"{CPD_MVK_DA_DATA_DIR}/train/subsets/CPD_MVK_DA_train_{n}_config_strat_rep_{rep_num}.xyz",
-    #     # f"{CPD_MVK_DA_DATA_DIR}/train/subsets/CPD_MVK_DA_train_{n}_config_strat_rep_{rep_num}.xyz",
-    #     # f"{CPD_MVK_DA_DATA_DIR}/train/subsets/CPD_MVK_DA_train_{n}_config_strat_rep_{rep_num}.xyz",
-    #     f"{CPD_MVK_DA_DATA_DIR}/train/subsets/CPD_MVK_DA_train_{n}_config_strat_ts_gauss_rep_{rep_num}.xyz",
-    #     # f"{CPD_MVK_DA_DATA_DIR}/train/subsets/CPD_MVK_DA_train_{n}_config_strat_ts_gauss_rep_{rep_num}.xyz",
-    #     # f"{CPD_MVK_DA_DATA_DIR}/train/subsets/CPD_MVK_DA_train_{n}_config_strat_ts_gauss_rep_{rep_num}.xyz",
-    # ]
-    # dataset_labels = ['Rep 1', 'Rep 2', 'Rep 3']
-    # save_name = 'CPD_MVK_DA_iter_train_subsets'
+    # ===== plot settings =====
+    save_name = resolved["save_name"]
+    plot_2d_xlim = resolved["plot_2d_xlim"]
+    plot_2d_ylim = resolved["plot_2d_ylim"]
+    del resolved
 
-    # full test set 
-    # f"{DATASETS_DIR}/da_paper_data/valid/endo_ace_wB97M_nonpca_orca.xyz",                       # vac no reaction
-    # f"{DATASETS_DIR}/da_paper_data/neb/endo_DA_neb_gas_wB97M.xyz",                              # vac reaction
-    # f"{DATASETS_DIR}/da_paper_data/neb/endo_DA_neb_water_wB97M.xyz",                              # vac reaction
-    # f"{DATASETS_DIR}/da_paper_data/valid/endo_in_water_ace_wB97M_short_orca_non_periodic.xyz",  # water reaction
-    # f"{TRAIN_SUBSETS_DIR}/endo_DA_valid_size_sorted.xyz",                                       # vac, water, reactants in water
-    # custom_xyz_parsers = [None, None, None, None, autode_props_parser]
-
-    # --- anthracene data ---
-    # ts_ref_config = flexible_ase_read(f'{ANTHRACENE_DA_DATA_DIR}/TS/anthracene_DA_vac_TS_wB97M.xyz')[0]
-    # react_coords = [(2, 20), (5, 22)]
-    # test_elements = {'C', 'H', 'O'}
-    # include_energies = True
-    # include_forces = True
-
-    # # raw complete ds
-    # # input_ds_fps = [
-    # #     f"{ANTHRACENE_DA_DATA_DIR}/anthracene_DA_vac_al_iter.xyz",
-    # #     f"{ANTHRACENE_DA_DATA_DIR}/anthracene_DA_vac_al_iter_force_filtered.xyz",
-    # #     f"{ANTHRACENE_DA_DATA_DIR}/anthracene_DA_in_toluene_al_iter.xyz",
-    # #     f"{ANTHRACENE_DA_DATA_DIR}/anthracene_DA_in_toluene_al_iter_force_filtered.xyz",
-    # #     f"{ANTHRACENE_DA_DATA_DIR}/anthracene_DA_al_traj_samples_dist_filtered_orca.xyz",
-    # #     f"{ANTHRACENE_DA_DATA_DIR}/anthracene_DA_al_traj_samples_dist_filtered_orca_force_filtered.xyz"
-    # # ]
-    # # dataset_labels = ['Vac', 'Vac Force Filtered' 'Solvated', 'Solvated Force Filtered', 'Extra', 'Extra Force Filtered']
-    # # save_name = 'anthracene_DA'
-
-    # # training data
-    # input_ds_fps = [
-    #     f"{ANTHRACENE_DA_DATA_DIR}/train/anthracene_DA_train.xyz",
-    #     f"{ANTHRACENE_DA_DATA_DIR}/valid/anthracene_DA_valid.xyz",
-    #     f"{ANTHRACENE_DA_DATA_DIR}/test/anthracene_DA_test.xyz"
-    # ]
-    # dataset_labels = ['Train', 'Valid', 'Test']
-    # save_name = 'anthracene_DA_train_subsets'
-
-    # vac solv seperated
-    # input_ds_fps = [
-    #     f"{ANTHRACENE_DA_DATA_DIR}/train/anthracene_DA_train_vac_only.xyz",
-    #     f"{ANTHRACENE_DA_DATA_DIR}/train/anthracene_DA_train_solv_only.xyz",
-    #     f"{ANTHRACENE_DA_DATA_DIR}/valid/anthracene_DA_valid_vac_only.xyz",
-    #     f"{ANTHRACENE_DA_DATA_DIR}/valid/anthracene_DA_valid_solv_only.xyz",
-    #     f"{ANTHRACENE_DA_DATA_DIR}/test/anthracene_DA_test_vac_only.xyz",
-    #     f"{ANTHRACENE_DA_DATA_DIR}/test/anthracene_DA_test_solv_only.xyz"
-    # ]
-    # dataset_labels = ['Train Vac', 'Train Solv', 'Valid Vac', 'Valid Solv', 'Test Vac', 'Test Solv']
-    # save_name = 'anthracene_DA_train_subsets'
-
-    # iter train subsets
-    # rep_num, n = 2, 46
-
-    # input_ds_fps = [
-    #     # f"{ANTHRACENE_DA_DATA_DIR}/train/subsets/anthracene_DA_train_{n}_config_strat_rep_1.xyz",
-    #     f"{ANTHRACENE_DA_DATA_DIR}/train/subsets/anthracene_DA_train_{n}_config_strat_rep_2.xyz",
-    #     # f"{ANTHRACENE_DA_DATA_DIR}/train/subsets/anthracene_DA_train_{n}_config_strat_rep_3.xyz",
-    #     # f"{ANTHRACENE_DA_DATA_DIR}/train/anthracene_DA_train_46_config_strat_rep_2_w_1_4_samples.xyz",
-    #     # f"{ANTHRACENE_TRAIN_DIR}/anthracene_DA_train.xyz"
-    # ]
-    # # dataset_labels = [f'Train {n} Rep 1', f'Train {n} Rep 2', f'Train {n} Rep 3', 'Train Full DS']
-    # dataset_labels = [f'Train {n} Rep 2', 'With 2 Additional 1_4 Samples']
-    # save_name = 'anthracene_DA_iter_train_subsets'
-
-    # additional sampling
-    # input_ds_fps = [
-    #     f"{SAMPLES_DIR}/anthracene_DA_vac_TS_wB97M_MACE-OFF23_medium_samples.xyz",
-    #     f"{ANTHRACENE_TRAIN_DIR}/anthracene_DA_train.xyz"
-    # ]
-    # dataset_labels = ['Samples', 'Train']
-    # save_name = 'anthracene_DA_constrained_sampling'
-
-    # additional al trajectory sampling
-    # input_ds_fps = [
-    #     # f"{ANTHRACENE_DA_DATA_DIR}/full_al_traj_samples.xyz",
-    #     f"{ANTHRACENE_DA_DATA_DIR}/full_al_traj_samples_dist_filtered_orca.xyz",
-    #     f"{ANTHRACENE_DA_DATA_DIR}/train/anthracene_DA_train.xyz",
-    # ]
-    # # dataset_labels = ['Full AL Traj Samples', 'Dist. Filtered', 'Train']
-    # dataset_labels = ['Dist. Filtered ORCA', 'Train']
-    # save_name = 'anthracene_DA_al_traj_sampling'
-
-    # --- guajadial DA data ---
-
-    ts_ref_config = flexible_ase_read(f'{GUAJADIAL_DA_DATA_DIR}/TS/guajadial_DA_vac_TS_wB97M.xyz')[0]
-    react_coords = [(13, 31), (6, 32)]
-    test_elements = {'C', 'H', 'O'}
-    include_energies = True
-    include_forces = True
-
-    # training data
-    input_ds_fps = [
-        f"{GUAJADIAL_DA_DATA_DIR}/train/guajadial_DA_train.xyz",
-        f"{GUAJADIAL_DA_DATA_DIR}/valid/guajadial_DA_valid.xyz",
-        f"{GUAJADIAL_DA_DATA_DIR}/test/guajadial_DA_test.xyz",
-        # f"{GUAJADIAL_DA_DATA_DIR}/test/guajadial_DA_test_PBE_def2_TZVP.xyz",
-    ]
-    dataset_labels = ['Train', 'Valid', 'Test']
-    # dataset_labels = ['wB97M', 'PBE']
-    save_name = 'guajadial_DA_train_subsets'
-
-    # vac solv seperated
-    # input_ds_fps = [
-    #     f"{GUAJADIAL_DA_DATA_DIR}/train/guajadial_DA_train_vac_only.xyz",
-    #     f"{GUAJADIAL_DA_DATA_DIR}/train/guajadial_DA_train_solv_only.xyz",
-    #     f"{GUAJADIAL_DA_DATA_DIR}/valid/guajadial_DA_valid_vac_only.xyz",
-    #     f"{GUAJADIAL_DA_DATA_DIR}/valid/guajadial_DA_valid_solv_only.xyz",
-    #     f"{GUAJADIAL_DA_DATA_DIR}/test/guajadial_DA_test_vac_only.xyz",
-    #     f"{GUAJADIAL_DA_DATA_DIR}/test/guajadial_DA_test_solv_only.xyz"
-    # ]
-    # dataset_labels = ['Train Vac', 'Train Solv', 'Valid Vac', 'Valid Solv', 'Test Vac', 'Test Solv']
-    # # dataset_labels = ['Train Solv', 'Valid Solv', 'Test Solv']
-    # save_name = 'guajadial_DA_train_subsets'
-
-    # additional al trajectory sampling
-    # input_ds_fps = [
-    #     # f"{GUAJADIAL_DA_DATA_DIR}/guajadial_extra_traj_samples.xyz",
-    #     # f"{GUAJADIAL_DA_DATA_DIR}/guajadial_extra_traj_samples_dist_filtered.xyz",
-    #     f"{GUAJADIAL_DA_DATA_DIR}/guajadial_extra_traj_samples_dist_filtered_vac.xyz",
-    #     f"{GUAJADIAL_DA_DATA_DIR}/guajadial_extra_traj_samples_dist_filtered_solv.xyz",
-    #     f"{GUAJADIAL_DA_DATA_DIR}/train/guajadial_DA_train.xyz",
-    # ]
-    # # dataset_labels = ['Full AL Traj Samples', 'Dist. Filtered', 'Train']
-    # # dataset_labels = ['Dist. Filtered', 'Train']
-    # dataset_labels = ['Dist. Filtered Vac Sample', 'Dist. Filtered Solv Sample', 'Train']
-    # # dataset_labels = ['Dist. Filtered ORCA', 'Train']
-    # save_name = 'guajadial_DA_al_traj_sampling'
-
-    # iter train subsets
-    # n = 50
-    # sample_str = ""
-    # # sample_str = "ts_gauss_"
-    # input_ds_fps = [
-    #     f"{GUAJADIAL_DA_DATA_DIR}/train/subsets/guajadial_DA_train_{n}_config_strat_{sample_str}rep_1.xyz",
-    #     # f"{GUAJADIAL_DA_DATA_DIR}/train/subsets/guajadial_DA_train_{n}_config_strat_{sample_str}rep_2.xyz",
-    #     # f"{GUAJADIAL_DA_DATA_DIR}/train/subsets/guajadial_DA_train_{n}_config_strat_{sample_str}rep_3.xyz",
-    # ]
-    # dataset_labels = ['Rep 1', 'Rep 2', 'Rep 3']
-    # save_name = 'guajadial_DA_iter_train_subsets'
-
-    # --- I Cl SN2 data ---
-    # input_ds_fps = [
-    #     f"{I_Cl_SN2_DATA_DIR}/I_Cl_SN2_vac_al_iter_force_filtered.xyz",
-    #     f"{I_Cl_SN2_DATA_DIR}/I_Cl_SN2_in_acetone_al_iter_force_filtered.xyz"
-    # ]
-    # dataset_labels = ['Vacuum', 'In Acetone']
-    # save_name = 'I_Cl_SN2'
-
-    # input_ds_fps = [
-    #     f"{I_Cl_SN2_TRAIN_DIR}/I_Cl_SN2_train.xyz",
-    #     f"{I_Cl_SN2_TRAIN_DIR}/I_Cl_SN2_valid.xyz",
-    #     f"{I_Cl_SN2_TRAIN_DIR}/I_Cl_SN2_test.xyz"
-    # ]
-    # dataset_labels = ['Train', 'Valid', 'Test']
-    # save_name = 'I_Cl_SN2_train_subsets'
-
-    # iter train subsets
-    # input_ds_fps = [
-    #     f"{I_Cl_SN2_TRAIN_DIR}/subsets/I_Cl_SN2_train_2_config_strat_rep_1.xyz",
-    #     f"{I_Cl_SN2_TRAIN_DIR}/subsets/I_Cl_SN2_train_2_config_strat_rep_2.xyz",
-    #     f"{I_Cl_SN2_TRAIN_DIR}/subsets/I_Cl_SN2_train_2_config_strat_rep_3.xyz",
-    #     # f"{I_Cl_SN2_DATA_DIR}/anthracene_DA_train.xyz"
-    # ]
-    # dataset_labels = ['Train 42 Rep 1', 'Train 42 Rep 2', 'Train 42 Rep 3', 'Train Full DS']
-    # save_name = 'I_Cl_SN2_iter_train_subsets'
-
-    # ts_ref_config = flexible_ase_read(f'{I_Cl_SN2_DATA_DIR}/I_Cl_SN2_vac_TS_wB97M.xyz')[0]
-    # react_coords = [(1, 2)]
-    # test_elements = {'C', 'H', 'O', 'I', 'Cl'}
-
-    # --------------------------
-
-    # === OTHER SETTINIGS ===
-    # energy_units = KCAL_PER_MOL
-    energy_units = MEV_PER_ATOM
-    plot_2d_xlim, plot_2d_ylim = None, None
-    # plot_2d_xlim, plot_2d_ylim = (1.0, 7.5), (1.0, 7.5)
-
-    # ================================
+    dpi = DPI
+    fig_size = SINGLE_COLUMN_FIG_SIZE
+    os.makedirs(f"{plot_dir}/2D", exist_ok=True)
+    os.makedirs(f"{plot_dir}/ds_analysis", exist_ok=True)
 
     input_ds_names = [get_name_from_path(input_ds_fp) for input_ds_fp in input_ds_fps]
 
     # load ts
-    ts_ref_bond_distances = {ri: ts_ref_config.get_distance(*ri) for ri in react_coords}
-    ts_ref_bond_dist_tuple = tuple([dist for dist in ts_ref_bond_distances.values()])
-    logger.info(f'TS ref bond distances: {ts_ref_bond_distances}')
-
-    from react_ml_test_public.helpers.io import get_ase_atoms_forces
-    from react_ml_test_public.helpers.settings import EV
-    from react_ml_test_public.helpers.utils import convert_units
+    if ts_ref_fpath is not None:
+        ts_ref_config = flexible_ase_read(ts_ref_fpath)[0]
+        ts_ref_bond_distances = {ri: ts_ref_config.get_distance(*ri) for ri in react_coords}
+        ts_ref_bond_dist_tuple = tuple([dist for dist in ts_ref_bond_distances.values()])
+        logger.info(f'TS ref bond distances: {ts_ref_bond_distances}')
+    else:
+        logger.info('TS ref path not provided. Skipping plotting of TS distance distributions.')
 
 
     all_configs, all_soap_desc_2D, all_energies, all_energy_deltas, all_force_deltas, all_force_norms, all_force_comps, all_r_coord_dists = [], [], [], [], [], [], [], []
@@ -365,16 +151,13 @@ if __name__ == "__main__":
 
         # load train configs
         configs = flexible_ase_read(input_ds_fp, cust_props_parser=custom_xyz_parsers[i] if custom_xyz_parsers is not None else None)
-        # for config in configs:
-        #     print(len(config))
-        # === SELECT TRAIN CONFIG TYPES HERE ===
-        filter_ids = [config_id for config_id, config in enumerate(configs)]                                                                                    # no filter
-        # filter_ids = [config_id for config_id, config in enumerate(configs) if len(config) in {118, 22}]                                                       # size filtered
-        # filter_ids = [config_id for config_id, config in enumerate(configs) if config.info['config_type'] == 'vacuum']                         # vacuum only
-        # # train_filter_ids = [config_id for config_id, config in enumerate(train_configs) if config.info['config_type'] == 'microsolvated']                # microsolvated only
-        # filter_ids = [config_id for config_id, config in enumerate(configs) if config.info['config_type'] in {'vacuum', 'reactants_in_water', 'water'}]      # vacuum + microsolvated only
-        # # train_filter_ids = [config_id for config_id, config in enumerate(train_configs) if config.info['config_type'] == 'reactants_in_water']            # reactants in water only
-        # # ==============================
+
+        # === FILTER CONFIG TYPES (filter_config_type in the input YAML) ===
+        if filter_config_type is None:
+            filter_ids = [config_id for config_id, config in enumerate(configs)]                                    # no filter
+        else:
+            filter_ids = [config_id for config_id, config in enumerate(configs) if config.info.get('config_type') == filter_config_type]    # this config type only
+        # ==============================
 
         configs = [configs[config_id] for config_id in filter_ids]
         logger.info(f'Num Filtered Configs: {len(configs)}')
@@ -394,17 +177,27 @@ if __name__ == "__main__":
         logger.info(f'Config Types in Dataset: {set(config_types)}')
         logger.info(f"Config Type Counts: {type_counts}")
 
-        # 1. get SOAP descriptors of training set
-        start_time = time()
-        average_soap = get_soap_descriptors(configs, 
-                                            specific_elements=test_elements, 
-                                            average='outer', 
-                                            compress_dim=None, 
-                                            flatten_output=True, 
-                                            cache_name=input_ds_name)
-        logger.info(f"Loaded / calculated {len(configs)} average train SOAP descriptors in {time() - start_time:.4f}s...")
-        soap_desc_2D = run_pca(average_soap, n_components=2)
-        all_soap_desc_2D.append(soap_desc_2D)
+        if calc_soap:
+            # 1. get SOAP descriptors of training set
+            start_time = time()
+            average_soap = get_soap_descriptors(configs,
+                                                specific_elements=test_elements,
+                                                average='outer',
+                                                compress_dim=None,
+                                                flatten_output=True,
+                                                cache_name=input_ds_name)
+            logger.info(f"Loaded / calculated {len(configs)} average train SOAP descriptors in {time() - start_time:.4f}s...")
+            soap_desc_2D = run_pca(average_soap, n_components=2)
+            all_soap_desc_2D.append(soap_desc_2D)
+
+        # configs grouped by atom count, i.e. by the species count that their relative
+        # energies and forces are measured against
+        atom_num_groups = {}
+        for config in configs:
+            if atom_num_groups.get(len(config)) is None:
+                atom_num_groups[len(config)] = [config]
+            else:
+                atom_num_groups[len(config)].append(config)
 
         if include_energies:
 
@@ -414,23 +207,16 @@ if __name__ == "__main__":
             all_energies.append(energies)
 
             # 2. get relative energies
-            atom_num_groups = {}
-            for config in configs:
-                if atom_num_groups.get(len(config)) is None:
-                    atom_num_groups[len(config)] = [config]
-                else:
-                    atom_num_groups[len(config)].append(config)
-
-            atom_num_group_energy_mins = {num_atoms: np.min(get_ase_props(group_configs, prop='energy')) 
+            atom_num_group_energy_mins = {num_atoms: np.min(get_ase_props(group_configs, prop='energy'))
                                             for num_atoms, group_configs in atom_num_groups.items()}
-            energy_deltas = np.array([abs(get_ase_atoms_energy(config) - atom_num_group_energy_mins[len(config)]) 
+            energy_deltas = np.array([abs(get_ase_atoms_energy(config) - atom_num_group_energy_mins[len(config)])
                             for config in configs])
             # print('Energy deltas: ', energy_deltas)
             all_energy_deltas.append(energy_deltas)
 
         if include_forces:
 
-            atom_num_group_force_mins = {num_atoms: np.min([np.mean(np.linalg.norm(config_forces, axis=0) * eV_to_mEV) 
+            atom_num_group_force_mins = {num_atoms: np.min([np.mean(np.linalg.norm(config_forces, axis=0) * eV_to_mEV)
                                                             for config_forces in get_ase_props(group_configs, prop='forces')])
                                         for num_atoms, group_configs in atom_num_groups.items()}
             force_deltas = [abs(np.mean(np.linalg.norm(get_ase_props([config], prop='forces'), axis=0) * eV_to_mEV) - atom_num_group_force_mins[len(config)]) for config in configs]
@@ -451,18 +237,6 @@ if __name__ == "__main__":
 
         logger.info("============================================")
 
-        # get list of indices of ts distances to filter out configs based on element
-        # for i, config in enumerate(train_configs):
-        #     assert config[r1[0]].symbol == 'C' and config[r1[1]].symbol == 'C'
-        #     assert config[r2[0]].symbol == 'C' and config[r2[1]].symbol == 'C'
-        # r1_atoms, r2_atoms = [3, 14], [8, 13] # reaction coordinates in water
-
-    # apply unit conversions for energy
-    # if energy_units == KCAL_PER_MOL:
-    #     # all_energies = [energies * eV_to_kcal_mol  for energies in all_energies]
-    #     all_energy_deltas = [energies * eV_to_kcal_mol  for energies in all_energy_deltas]
-    #     print('All energy deltas: ', all_energy_deltas)
-
     # apply unit conversions for energy
     if include_energies:
         if energy_units == KCAL_PER_MOL:
@@ -474,50 +248,46 @@ if __name__ == "__main__":
             all_energies = [convert_units(energies, EV, MEV_PER_ATOM, [len(config) for config in all_configs[i]])  for i, energies in enumerate(all_energies)]
             all_energy_deltas = [convert_units(energies, EV, MEV_PER_ATOM, [len(config) for config in all_configs[i]])  for i, energies in enumerate(all_energy_deltas)]
 
-    from react_ml_test_public.helpers.settings import KCAL_PER_MOL
-
-    dpi = 600
-    fig_size = (3.5, 2.5)
-
     if not include_energies:
         all_energy_deltas = [None for _ in range(len(input_ds_names))]
 
-    # 1. PCA SOAP plot
-    for input_ds_name, soap_desc_2D, energy_deltas, configs in zip(input_ds_names, all_soap_desc_2D, all_energy_deltas, all_configs):
+    if calc_soap:
+        # 1. PCA SOAP plot
+        for input_ds_name, soap_desc_2D, energy_deltas, configs in zip(input_ds_names, all_soap_desc_2D, all_energy_deltas, all_configs):
 
-        plot_settings = PlotSettings(x_label='PC1', 
-                                     y_label='PC2', 
-                                     colour_bar_label=f'\u2206 Energy ({energy_units})', 
-                                     title=input_ds_name, 
-                                     dpi=dpi, 
-                                     fig_size=fig_size,
-                                     show_legend=False)
+            plot_settings = PlotSettings(x_label='PC1',
+                                        y_label='PC2',
+                                        colour_bar_label=f'∆ Energy ({energy_units})',
+                                        title=input_ds_name,
+                                        dpi=dpi,
+                                        fig_size=fig_size,
+                                        show_legend=False)
 
-        # concat_pca_soap_descs = np.concatenate(train_config_pca_soap_descs, axis=0)
-        soap_pca_1, soap_pca_2 = soap_desc_2D[:, 0], soap_desc_2D[:, 1]
+            # concat_pca_soap_descs = np.concatenate(train_config_pca_soap_descs, axis=0)
+            soap_pca_1, soap_pca_2 = soap_desc_2D[:, 0], soap_desc_2D[:, 1]
 
-        plot_2d([soap_desc_2D],
-            f"{PLOT_DIR}/2D/{input_ds_name}_soap_PCA.png", 
-            colour_maps=[energy_deltas] if energy_deltas is not None else None,
-            plot_settings=plot_settings,
-            )
+            plot_2d([soap_desc_2D],
+                f"{plot_dir}/2D/{input_ds_name}_soap_PCA.png",
+                colour_maps=[energy_deltas] if energy_deltas is not None else None,
+                plot_settings=plot_settings,
+                )
 
-        # if include_energies:
-        #     properties = {"PCA-1": soap_pca_1, "PCA-2": soap_pca_2, "score": energy_deltas}
-        #     widget = chemiscope.show(configs, properties=properties)
-        #     widget.save(f"out/chemiscope/{input_ds_name}_soap_pca.json")
+            # if include_energies:
+            #     properties = {"PCA-1": soap_pca_1, "PCA-2": soap_pca_2, "score": energy_deltas}
+            #     widget = chemiscope.show(configs, properties=properties)
+            #     widget.save(f"out/chemiscope/{input_ds_name}_soap_pca.json")
 
-    # 1.2 combined PCA plot
-    plot_settings = PlotSettings(x_label='PC1', 
-                                 y_label='PC2', 
-                                 title=input_ds_name, 
-                                 dpi=dpi, 
-                                 fig_size=fig_size,
-                                 show_legend=False)
+        # 1.2 combined PCA plot
+        plot_settings = PlotSettings(x_label='PC1',
+                                    y_label='PC2',
+                                    title=input_ds_name,
+                                    dpi=dpi,
+                                    fig_size=fig_size,
+                                    show_legend=False)
 
-    plot_2d(all_soap_desc_2D,
-            f"{PLOT_DIR}/ds_analysis/{save_name}_2D_soap_PCA.png", 
-            plot_settings=plot_settings)
+        plot_2d(all_soap_desc_2D,
+                f"{plot_dir}/ds_analysis/{save_name}_2D_soap_PCA.png",
+                plot_settings=plot_settings)
 
     # 2. plot energies
     plt.figure(figsize=fig_size, dpi=dpi)
@@ -528,7 +298,7 @@ if __name__ == "__main__":
 
     plt.legend(loc='upper right')
     plt.xlabel('Index')
-    plt.ylabel('Energy (meV / atom)')
+    plt.ylabel(f'Energy ({energy_units})')
     plt.tight_layout()
 
     # plot relative energies
@@ -543,7 +313,7 @@ if __name__ == "__main__":
             # save chemiscope energies
             # properties = {"Index": indices, f"Rel. Energy ({energy_units}))": energy_deltas}
             # chemiscope_out_fp = f"out/chemiscope/{input_ds_name}_rel_energies.json"
-            # chemiscope.write_input(chemiscope_out_fp, 
+            # chemiscope.write_input(chemiscope_out_fp,
             #                     configs,
             #                     properties=properties)
             # print(f'Saved chemiscope plot to {chemiscope_out_fp}...')
@@ -553,7 +323,7 @@ if __name__ == "__main__":
         plt.ylabel(f'Rel. Energy ({energy_units})')
         # plt.yscale("log")
         plt.tight_layout()
-        plt.savefig(f"{PLOT_DIR}/ds_analysis/{save_name}_rel_energies.png", dpi=dpi)
+        plt.savefig(f"{plot_dir}/ds_analysis/{save_name}_rel_energies.png", dpi=dpi)
 
     # 4. plot raw force components
     if include_forces:
@@ -565,68 +335,67 @@ if __name__ == "__main__":
         plt.ylabel(r'Force Component (meV / $\AA$)')
         # plt.yscale("log")
         plt.tight_layout()
-        save_fp = f"{PLOT_DIR}/ds_analysis/{save_name}_force_comps.png"
+        save_fp = f"{plot_dir}/ds_analysis/{save_name}_force_comps.png"
         plt.savefig(save_fp, dpi=dpi)
         print(f"Saved {save_fp}...")
 
-    print('React Coords Num', len(react_coords))
-    if len(react_coords) == 2:
-        # 5. TS dist plot
-        for input_ds_name, energy_deltas, r_coord_dists, configs in zip(input_ds_names, all_energy_deltas, all_r_coord_dists, all_configs):
+    if ts_ref_fpath is not None:
+        print('React Coords Num', len(react_coords))
+        if len(react_coords) == 2:
+            # 5. TS dist plot
+            for input_ds_name, energy_deltas, r_coord_dists, configs in zip(input_ds_names, all_energy_deltas, all_r_coord_dists, all_configs):
 
-            points = np.array([np.array([x, y]) for x, y in r_coord_dists])
-            plot_settings = PlotSettings(x_label=r'r1 / $\AA$', y_label=r'r2 / $\AA$', colour_bar_label='\u2206 Energy (meV / atom)', title=input_ds_name,
-                                        dpi=dpi, fig_size=fig_size, show_legend=False, xlim=plot_2d_xlim, ylim=plot_2d_ylim)
-            plot_2d([points],
-                    f"{PLOT_DIR}/2D/{input_ds_name}_2D_react_coords.png", 
-                    colour_maps=[energy_deltas] if energy_deltas is not None else None,
+                points = np.array([np.array([x, y]) for x, y in r_coord_dists])
+                plot_settings = PlotSettings(x_label=r'r1 / $\AA$', y_label=r'r2 / $\AA$', colour_bar_label='∆ Energy (meV / atom)', title=input_ds_name,
+                                            dpi=dpi, fig_size=fig_size, show_legend=False, xlim=plot_2d_xlim, ylim=plot_2d_ylim)
+                plot_2d([points],
+                        f"{plot_dir}/2D/{input_ds_name}_2D_react_coords.png",
+                        colour_maps=[energy_deltas] if energy_deltas is not None else None,
+                        plot_settings=plot_settings,
+                        ref_points=[ts_ref_bond_dist_tuple],
+                        # ref_point_labels=['TS'],
+                        )
+
+                # properties = {r'$r_{1}$ / $\AA$': np.array(r1_dists), r'$r_{2}$ / $\AA$':np.array(r2_dists)}
+                # widget = chemiscope.show(configs, properties=properties)
+                # widget.save(f"out/chemiscope/{input_ds_name}_ts_dist.json")
+
+            # combined TS dist plot
+            all_points = [np.array([np.array([x, y]) for x, y in r_coord_dists]) for r_coord_dists in all_r_coord_dists]
+            plot_settings = PlotSettings(x_label=r'r1 / $\AA$', y_label=r'r2 / $\AA$', title=input_ds_name, dpi=dpi, fig_size=fig_size, show_legend=False)
+            plot_2d(all_points,
+                    f"{plot_dir}/ds_analysis/{save_name}_2D_react_coords.png",
                     plot_settings=plot_settings,
                     ref_points=[ts_ref_bond_dist_tuple],
-                    # ref_point_labels=['TS'],
+                    ref_point_labels=['TS'],
                     )
 
-            # properties = {r'$r_{1}$ / $\AA$': np.array(r1_dists), r'$r_{2}$ / $\AA$':np.array(r2_dists)}
-            # widget = chemiscope.show(configs, properties=properties)
-            # widget.save(f"out/chemiscope/{input_ds_name}_ts_dist.json")
+        # train_ts_distances = np.array([abs(react_coord_dists[i] - ts_ref_bond_distances[r1]) for i in range(len(configs))])
 
-        # combined TS dist plot
-        all_points = [np.array([np.array([x, y]) for x, y in r_coord_dists]) for r_coord_dists in all_r_coord_dists]
-        plot_settings = PlotSettings(x_label=r'r1 / $\AA$', y_label=r'r2 / $\AA$', title=input_ds_name, dpi=dpi, fig_size=fig_size, show_legend=False)
-        plot_2d(all_points,
-                f"{PLOT_DIR}/ds_analysis/{save_name}_2D_react_coords.png", 
-                plot_settings=plot_settings,
-                ref_points=[ts_ref_bond_dist_tuple],
-                ref_point_labels=['TS'],
-                )
+        # plot histogram of TS dist on reaction coordinate distribution
+        plt.figure(figsize=fig_size, dpi=dpi)
+        colors = list(plt.get_cmap("tab10").colors)
+        for i, (ds_label, input_ds_name, r_coord_dists) in enumerate(zip(dataset_labels, input_ds_names, all_r_coord_dists)):
+            ts_dists = [sum([d - ts_ref_bond_dist_tuple[i] for i, d in enumerate(r_coord_dist)]) for r_coord_dist in r_coord_dists]
+            plt.hist(ts_dists, bins=list(reversed([-0.2 * i for i in range(10)])) + [0.2 * i for i in range(50)], alpha=0.5, color=colors[i], label=ds_label)
 
-    # train_ts_distances = np.array([abs(react_coord_dists[i] - ts_ref_bond_distances[r1]) for i in range(len(configs))])
+            # plot kde
+            ts_dists = np.array(ts_dists)
+            bin_edges = np.histogram_bin_edges(ts_dists, bins=40)
+            bin_width = bin_edges[1] - bin_edges[0]
+            xs = np.linspace(ts_dists.min(), ts_dists.max(), 500)
+            kde = gaussian_kde(ts_dists, bw_method="scott")
+            kde_counts = kde(xs) * len(ts_dists) * bin_width
+            plt.plot(xs, kde_counts, color=colors[i], linewidth=1)
 
-    # plot histogram of TS dist on reaction coordinate distribution
-    plt.figure(figsize=fig_size, dpi=dpi)
-    colors = list(plt.get_cmap("tab10").colors)
-    for i, (ds_label, input_ds_name, r_coord_dists) in enumerate(zip(dataset_labels, input_ds_names, all_r_coord_dists)):
-        ts_dists = [sum([d - ts_ref_bond_dist_tuple[i] for i, d in enumerate(r_coord_dist)]) for r_coord_dist in r_coord_dists]
-        # print(sorted(ts_dists))
-        # ts_dists = [r1_dist - ts_ref_bond_dist_tuple[0] + r2_dist - ts_ref_bond_dist_tuple[1] for i, (r1_dist, r2_dist) in enumerate(zip(r1_dists, r2_dists))]
-        plt.hist(ts_dists, bins=list(reversed([-0.2 * i for i in range(10)])) + [0.2 * i for i in range(50)], alpha=0.5, color=colors[i], label=ds_label)
+        plt.xlabel(r'TS Dist. $\AA$', fontsize=10)
+        plt.ylabel(r'Count', fontsize=10)
+        plt.xticks(fontsize=10)
+        plt.yticks(fontsize=10)
 
-        # plot kde
-        ts_dists = np.array(ts_dists)
-        bin_edges = np.histogram_bin_edges(ts_dists, bins=40)
-        bin_width = bin_edges[1] - bin_edges[0]
-        xs = np.linspace(ts_dists.min(), ts_dists.max(), 500)
-        kde = gaussian_kde(ts_dists, bw_method="scott")
-        kde_counts = kde(xs) * len(ts_dists) * bin_width
-        plt.plot(xs, kde_counts, color=colors[i], linewidth=1)
+        plt.legend()
+        plt.tight_layout()
 
-    plt.xlabel(r'TS Dist. $\AA$', fontsize=10)
-    plt.ylabel(r'Count', fontsize=10)
-    plt.xticks(fontsize=10)
-    plt.yticks(fontsize=10)
-
-    plt.legend()
-    plt.tight_layout()
-
-    save_fp = f"{PLOT_DIR}/ds_analysis/{save_name}_data_hist.png"
-    plt.savefig(save_fp, dpi=dpi)
-    print(f"Saved {save_fp}...")
+        save_fp = f"{plot_dir}/ds_analysis/{save_name}_data_hist.png"
+        plt.savefig(save_fp, dpi=dpi)
+        print(f"Saved {save_fp}...")

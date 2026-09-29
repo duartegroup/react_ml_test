@@ -1,0 +1,77 @@
+# run_ds_analysis.py input YAML - guajadial_DA train / valid / test dataset analysis.
+# Analyses the spread of the guajadial_DA dataset subsets about the reaction coordinate:
+# SOAP-descriptor PCA projections, absolute / relative energy distributions, force
+# distributions and the r1 / r2 reaction-coordinate distributions.
+
+# Run with:
+#   rmlt run-ds-analysis inputs/dataset/guajadial_DA_train_subsets.yaml
+
+# Paths are relative to the repository root.
+
+# ---- datasets to analyse ----
+# Any number of datasets can be listed; each is analysed on its own and plotted against
+# the others, and the labels only affect the legends / plot titles.
+input_ds_fps:
+  - data/reaction_data/guajadial_DA/train/guajadial_DA_train.xyz
+  - data/reaction_data/guajadial_DA/valid/guajadial_DA_valid.xyz
+  - data/reaction_data/guajadial_DA/test/guajadial_DA_test.xyz
+dataset_labels: [Train, Valid, Test]     # one label per dataset (default: the file names)
+
+# Optional per-dataset config-property parsers, one entry per 'input_ds_fps' entry:
+# "orca_props_parser" / "autode_props_parser" / "hartree_props_parser", or null for the
+# default parsing (which reads the usual energy / force labels, REF_energy included).
+# custom_xyz_parsers: [null, null, null]
+
+# ---- reaction coordinate reference ----
+# ts_ref_fpath is optional: without it the distances are still measured, but the TS plots
+# and the TS-distance histogram are skipped.
+ts_ref_fpath: data/reaction_data/guajadial_DA/TS/guajadial_DA_vac_TS_wB97M.xyz
+react_coords: [[13, 31], [6, 32]]        # reactive atom pairs defining the r1 / r2 distances
+
+# ---- config type filter (default: no filtering) ----
+# Only analyse configs carrying this config_type label in their .xyz metadata.
+# Set it with the reactive system's datasets to split them into their vacuum / solvated
+# halves - for the guajadial_DA datasets above, e.g. 'vacuum' or 'solvated' - keeping
+# train / valid / test of that one config type in its own run.
+# filter_config_type: vacuum             # or solvated
+
+# ---- what to calculate ----
+include_energies: true
+include_forces: true
+energy_units: "meV / atom"               # or "kcal / mol"
+
+# SOAP-descriptor PCA plots. Off by default: they need dscribe, and the descriptors of a
+# whole dataset take a while to calculate.
+calc_soap: false
+test_elements: [C, H, O]                 # elements the SOAP descriptors are calculated for,
+                                         # when calc_soap is true (default: every element)
+
+# ---- plot settings ----
+save_name: guajadial_DA_train_subsets    # base name of the plots written to out/plt/ds_analysis
+# plot_2d_xlim: [1.0, 7.5]               # optional r1 (x) / r2 (y) limits for the 2D plots
+# plot_2d_ylim: [1.0, 7.5]
+
+# ---- run settings ----
+# data_dir / out_dir default to the DATA_DIR / OUT_DIR of settings.py; set them to read /
+# write somewhere other than the directory the run was started from
+# data_dir: "$DATA/data"
+# out_dir: "$DATA/out"
+
+# --- other selections used with this script (uncomment as needed) ---
+# vacuum / solvated subsets, i.e. what filter_config_type: vacuum / solvated does in one run
+# per config type:
+# input_ds_fps:
+#   - data/reaction_data/guajadial_DA/train/guajadial_DA_train_vac_only.xyz
+#   - data/reaction_data/guajadial_DA/train/guajadial_DA_train_solv_only.xyz
+#   - data/reaction_data/guajadial_DA/valid/guajadial_DA_valid_vac_only.xyz
+#   - data/reaction_data/guajadial_DA/valid/guajadial_DA_valid_solv_only.xyz
+#   - data/reaction_data/guajadial_DA/test/guajadial_DA_test_vac_only.xyz
+#   - data/reaction_data/guajadial_DA/test/guajadial_DA_test_solv_only.xyz
+# dataset_labels: [Train Vac, Train Solv, Valid Vac, Valid Solv, Test Vac, Test Solv]
+# save_name: guajadial_DA_train_subsets_vac_solv
+# --- level of theory comparison ---
+# input_ds_fps:
+#   - data/reaction_data/guajadial_DA/test/guajadial_DA_test_wB97M_TZVPP.xyz
+#   - data/reaction_data/guajadial_DA/test/guajadial_DA_test_PBE_def2_TZVP.xyz
+# dataset_labels: [wB97M, PBE]
+# save_name: guajadial_DA_test_lot_comparison

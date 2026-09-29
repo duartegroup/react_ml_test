@@ -1,0 +1,57 @@
+# run_ds_analysis.py input YAML - CPD + MVK DA train / valid / test dataset analysis.
+# Analyses the spread of the CPD_MVK_DA dataset subsets about the reaction coordinate:
+# SOAP-descriptor PCA projections, absolute / relative energy distributions, force
+# distributions and the r1 / r2 reaction-coordinate distributions.
+
+# Run with:
+#   rmlt run-ds-analysis inputs/dataset/CPD_MVK_DA_train_subsets.yaml
+
+# Paths are relative to the repository root.
+
+# ---- datasets to analyse ----
+input_ds_fps:
+  - data/reaction_data/CPD_MVK_DA/train/CPD_MVK_DA_train.xyz
+  - data/reaction_data/CPD_MVK_DA/valid/CPD_MVK_DA_valid.xyz
+  - data/reaction_data/CPD_MVK_DA/test/CPD_MVK_DA_test.xyz
+dataset_labels: [Train, Valid, Test]     # one label per dataset (default: the file names)
+
+# ---- reaction coordinate reference ----
+# ts_ref_fpath is optional: without it the distances are still measured, but the TS plots
+# and the TS-distance histogram are skipped.
+ts_ref_fpath: data/reaction_data/CPD_MVK_DA/TS/CPD_MVK_DA_vac_TS_wB97M.xyz
+react_coords: [[1, 12], [6, 11]]         # reactive atom pairs defining the r1 / r2 distances
+
+# ---- config type filter (default: no filtering) ----
+# Only analyse configs carrying this config_type label in their .xyz metadata, i.e. the
+# vacuum or solvated half of the datasets above.
+# filter_config_type: vacuum             # or solvated
+
+# ---- what to calculate ----
+include_energies: true
+include_forces: true
+energy_units: "meV / atom"               # or "kcal / mol"
+
+# SOAP-descriptor PCA plots. Off by default: they need dscribe, and the descriptors of a
+# whole dataset take a while to calculate.
+calc_soap: true
+test_elements: [C, H, O]                 # elements the SOAP descriptors are calculated for,
+                                         # when calc_soap is true (default: every element)
+filter_config_type: null                 # or 'vacuum' for vacuum only, or 'solvated' for solvated only
+
+# ---- plot settings ----
+save_name: CPD_MVK_DA_train_subsets      # base name of the plots written to out/plt/ds_analysis
+# plot_2d_xlim: [1.0, 7.5]               # optional r1 (x) / r2 (y) limits for the 2D plots
+# plot_2d_ylim: [1.0, 7.5]
+
+# ---- run settings ----
+# data_dir / out_dir default to the DATA_DIR / OUT_DIR of settings.py; set them to read /
+# write somewhere other than the directory the run was started from
+# out_dir: "$DATA/out"
+
+# --- other selections used with this script (uncomment as needed) ---
+# the vacuum / solvated test subsets, as split out by filter-datasets / save-train-test-split:
+# input_ds_fps:
+#   - data/reaction_data/CPD_MVK_DA/test/CPD_MVK_DA_test_vac_only.xyz
+#   - data/reaction_data/CPD_MVK_DA/test/CPD_MVK_DA_test_solv_only.xyz
+# dataset_labels: [Test Vac, Test Solv]
+# save_name: CPD_MVK_DA_test_vac_solv

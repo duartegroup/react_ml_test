@@ -5,6 +5,8 @@ import argparse
 import glob
 import os
 
+import ase.io
+
 from mlptrain.utils import orca_output_to_npz
 
 from react_ml_test_public.helpers import inputs as rmlt_inputs
@@ -59,3 +61,21 @@ if __name__ == "__main__":
 
     logger.info(f"Saving the {input_name} ORCA outputs under {work_dir}...")
     orca_output_to_npz(out_fpaths, input_name, work_dir)
+
+    # rewrite the .xyz as one extended xyz with a 100 A cell and REF_ energies/forces
+    xyz_fpath = f"{work_dir}/{input_name}.xyz"
+
+    if os.path.exists(xyz_fpath):
+        frames = ase.io.read(xyz_fpath, ":")
+
+        for atoms in frames:
+            energy, forces = atoms.get_potential_energy(), atoms.get_forces()
+            atoms.calc = None
+            atoms.set_cell([100, 100, 100])
+            atoms.pbc = True
+            atoms.info["REF_energy"] = energy
+            atoms.arrays["REF_forces"] = forces
+
+        ase.io.write(xyz_fpath, frames, format="extxyz")
+
+    os.remove(f"{work_dir}/{input_name}.npz")

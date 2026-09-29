@@ -10,6 +10,7 @@ function in this module that takes in and processes the YAML for that script:
     resolve_mlip_ts_opt_yaml(...)                  -> run_mlip_ts_opt.py
     resolve_mlip_md_yaml(...)                      -> run_mlip_md.py
     resolve_trajectory_analysis_yaml(...)          -> run_trajectory_analysis.py
+    resolve_ds_analysis_yaml(...)                  -> run_ds_analysis.py
     resolve_save_dft_inputs_yaml(...)              -> save_dft_inputs_from_xyz.py
     resolve_check_orca_output_yaml(...)            -> check_orca_output.py
     resolve_save_orca_out_to_xyz_yaml(...)         -> save_orca_out_to_xyz.py
@@ -31,6 +32,7 @@ import yaml
 from react_ml_test_public.helpers.io import (
     autode_props_parser,
     flexible_ase_read,
+    get_name_from_path,
     hartree_props_parser,
     orca_props_parser,
     substitute_yaml_variables,
@@ -882,6 +884,164 @@ def resolve_trajectory_analysis_yaml(input_yaml_fpath: str, parser=None):
         "r1_range": r1_range,
         "r2_range": r2_range,
         "show_legend": show_legend,
+    }
+
+
+def resolve_ds_analysis_yaml(input_yaml_fpath: str, parser=None):
+    """Load + process the input YAML for run_ds_analysis.py.
+
+    The YAML names the datasets (.xyz files) to analyse and plot alongside each other, the
+    optional DFT reference TS and the reactive atom pairs defining the reaction-coordinate
+    distances, which per-config properties to calculate (energies / forces / SOAP descriptors)
+    and the plot settings. Returns a flat dict of the config variables that the script's
+    ``__main__`` declares.
+
+    ``ts_ref_fpath`` is optional (None when unset): the reaction-coordinate distances are
+    measured either way, but the plots measured against the TS (and its distances) are only
+    drawn when it is given. ``calc_soap`` defaults to False, so the SOAP-descriptor PCA plots
+    (and the dscribe dependency they need) are opt-in.
+
+    Data / output directories may be set per-YAML with the optional ``data_dir`` and ``out_dir``
+    fields, which default to ``DATA_DIR`` / ``OUT_DIR`` from settings.py. A relative dataset
+    path that does not resolve from the current working directory is taken to be relative to
+    ``data_dir``, and plots are written under ``out_dir`` (see ``resolve_out_dirs``, i.e.
+    ``<out_dir>/plt``).
+    """
+    input_config = _load_yaml_config(input_yaml_fpath, parser)
+
+    def _need(key):
+        value = input_config.get(key, None)
+        if value is None:
+            _error(parser, f"Missing required field '{key}' in input YAML.")
+        return value
+
+    def _parse_pair(pair):
+        try:
+            pair = tuple(int(atom_id) for atom_id in pair)
+        except (TypeError, ValueError):
+            _error(parser, "'react_coords' must be a list of pairs of atom indices, "
+                           "e.g. [[1, 12], [6, 11]].")
+        if len(pair) != 2:
+            _error(parser, "'react_coords' must be a list of pairs of atom indices, "
+                           "e.g. [[1, 12], [6, 11]].")
+        return pair
+
+    # ===== data / output directories =====
+    # defaults come from settings.py, so a YAML only needs to set these when it should read /
+    # write somewhere other than the DATA_DIR / OUT_DIR the run was started from
+    data_dir = input_config.get("data_dir", DATA_DIR)
+    out_dir, plot_dir, _csv_dir = resolve_out_dirs(input_config.get("out_dir", OUT_DIR))
+
+    # ===== datasets to analyse =====
+    input_ds_fps = input_config.get("input_ds_fps", None)
+    if not isinstance(input_ds_fps, list) or not input_ds_fps:
+        _error(parser, "'input_ds_fps' must be a non-empty list of dataset .xyz paths "
+                       "in the input YAML.")
+    input_ds_fps = [resolve_data_path(str(fpath), data_dir) for fpath in input_ds_fps]
+    not_found = [fpath for fpath in input_ds_fps if not os.path.isfile(fpath)]
+    if not_found:
+        _error(parser, f"Dataset file(s) not found: {not_found} (relative paths are taken as "
+                       f"relative to data_dir: {data_dir!r}).")
+
+    # legend labels: one per dataset, defaulting to the file name of each
+    dataset_labels = input_config.get("dataset_labels", None)
+    if dataset_labels is None:
+        dataset_labels = [get_name_from_path(fpath) for fpath in input_ds_fps]
+    if len(dataset_labels) != len(input_ds_fps):
+        _error(parser, f"'dataset_labels' must have one label per entry of 'input_ds_fps' "
+                       f"({len(input_ds_fps)}), got {len(dataset_labels)}.")
+
+    # per-dataset config-property parsers, for datasets whose energies / forces are not
+    # under the standard labels (see flexible_ase_read)
+    custom_xyz_parsers = input_config.get("custom_xyz_parsers", None)
+    if custom_xyz_parsers is not None:
+        if not isinstance(custom_xyz_parsers, list) or len(custom_xyz_parsers) != len(input_ds_fps):
+            _error(parser, f"'custom_xyz_parsers' must have one entry per entry of "
+                           f"'input_ds_fps' ({len(input_ds_fps)}), each a parser name or null "
+                           f"for the default parsing.")
+        _xyz_parsers = {
+            "orca_props_parser": orca_props_parser,
+            "autode_props_parser": autode_props_parser,
+            "hartree_props_parser": hartree_props_parser,
+        }
+        resolved_parsers = []
+        for parser_name in custom_xyz_parsers:
+            if parser_name is None:
+                resolved_parsers.append(None)
+            elif isinstance(parser_name, str) and parser_name in _xyz_parsers:
+                resolved_parsers.append(_xyz_parsers[parser_name])
+            else:
+                _error(parser, f"Unknown custom_xyz_parsers entry: {parser_name!r} "
+                               f"(choose from {sorted(_xyz_parsers)}, or null for the default "
+                               f"parsing).")
+        custom_xyz_parsers = resolved_parsers
+
+    # only analyse configs of one config_type (as labelled in the .xyz metadata)
+    filter_config_type = input_config.get("filter_config_type", None)
+    if filter_config_type not in (None, "vacuum", "solvated"):
+        _error(parser, f"Unrecognised filter_config_type: {filter_config_type!r} "
+                       f"(choose from None / 'vacuum' / 'solvated').")
+
+    # ===== reaction coordinate reference =====
+    # the TS reference is optional: without it the reaction-coordinate distances are still
+    # measured, but nothing is plotted against the TS
+    ts_ref_fpath = input_config.get("ts_ref_fpath", None)
+    if ts_ref_fpath is not None:
+        ts_ref_fpath = resolve_data_path(str(ts_ref_fpath), data_dir)
+        if not os.path.isfile(ts_ref_fpath):
+            _error(parser, f"ts_ref_fpath not found: {ts_ref_fpath!r} (relative paths are taken "
+                           f"as relative to data_dir: {data_dir!r}).")
+    react_coords = [_parse_pair(pair) for pair in _need("react_coords")]
+    test_elements = input_config.get("test_elements", None)
+    if test_elements is not None and not isinstance(test_elements, list):
+        _error(parser, "'test_elements' must be a list of element symbols, e.g. [C, H, O].")
+    test_elements = set(test_elements) if test_elements is not None else None
+
+    # ===== what to calculate =====
+    include_energies = _as_bool(input_config.get("include_energies", True), default=True)
+    include_forces = _as_bool(input_config.get("include_forces", True), default=True)
+    # the SOAP-descriptor PCA plots need dscribe, so they are opt-in
+    calc_soap = _as_bool(input_config.get("calc_soap", False), default=False)
+
+    # the energy conversions the script applies are the two below, so any other unit named
+    # in the YAML is a config error rather than a label that silently keeps eV
+    _energy_units = {
+        "mev/atom": MEV_PER_ATOM,
+        "kcal/mol": KCAL_PER_MOL,
+    }
+    energy_units_name = input_config.get("energy_units", None)
+    if energy_units_name is None:
+        energy_units = MEV_PER_ATOM
+    else:
+        energy_units = _energy_units.get("".join(str(energy_units_name).lower().split()), None)
+        if energy_units is None:
+            _error(parser, f"Unrecognised energy_units: {energy_units_name!r} "
+                           f"(choose from {sorted(_energy_units)}).")
+
+    # ===== plot settings =====
+    save_name = str(_need("save_name"))
+    # both limits are [lo, hi] pairs, so the shared y-limit parsing is used for each
+    plot_2d_xlim = _parse_ylim(input_config.get("plot_2d_xlim", None))
+    plot_2d_ylim = _parse_ylim(input_config.get("plot_2d_ylim", None))
+
+    return {
+        "input_ds_fps": input_ds_fps,
+        "dataset_labels": dataset_labels,
+        "custom_xyz_parsers": custom_xyz_parsers,
+        "filter_config_type": filter_config_type,
+        "ts_ref_fpath": ts_ref_fpath,
+        "react_coords": react_coords,
+        "test_elements": test_elements,
+        "include_energies": include_energies,
+        "include_forces": include_forces,
+        "calc_soap": calc_soap,
+        "energy_units": energy_units,
+        "save_name": save_name,
+        "plot_2d_xlim": plot_2d_xlim,
+        "plot_2d_ylim": plot_2d_ylim,
+        "data_dir": data_dir,
+        "out_dir": out_dir,
+        "plot_dir": plot_dir,
     }
 
 
