@@ -1,15 +1,18 @@
 """
 IO file helpers.
 """
+import glob
 import os
 import re
 from contextlib import contextmanager
 from typing import Callable, Dict, List, Literal, Union
+
 import ase
+import numpy as np
 from ase.io import read
 from ase.io.extxyz import read_extxyz
-import numpy as np
-import glob
+
+from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.settings import (
     ANI_1XNR_MODEL_DIR,
     ANI_MODEL_LOADER,
@@ -22,7 +25,6 @@ from react_ml_test_public.helpers.settings import (
     MACE_MODELS,
     resolve_model_dir,
 )
-from react_ml_test_public.helpers.logging import logger
 
 
 def convert_npz_to_xyz():
@@ -38,7 +40,7 @@ def convert_npz_to_xyz():
 
 
 def get_xyz_config_offsets(xyz_fpath: str, 
-                           return_elements: bool = False) -> Union[list[int], tuple[list[int], list[list[str]]]]:
+                           return_elements: bool = False) -> list[tuple[int]] | tuple[tuple[int], list[int]]:
     """
     Get offsets of where all configurations begin and end in a .xyz file without explcitily loading Atoms objects through ase.
     This is useful for sampling individual configs from very large datasets.
@@ -120,11 +122,81 @@ def save_dataset_batches(dataset_fp: str,
     logger.info(f"Successfully saved {ds_name} into {num_batches} batches...")
 
 
+def parse_index(index: slice | int | str) -> slice | int:
+    """
+    Convert a string index/slice (as produced by YAML, e.g. from an unquoted '0' or a
+    quoted '-3:') into the literal int or slice it represents. An int or slice input is
+    returned unchanged.
+
+    index: same as for any list indexing:
+        0 or '0': first configuration
+        -2 or '-2': second to last
+        ':': all
+        '-3:': three last
+        '::2': even
+        '1::2': odd
+    """
+    if isinstance(index, (int, slice)):
+        return index
+    if not isinstance(index, str):
+        raise TypeError(f"index must be an int, slice, or str, not {type(index)}.")
+
+    index = index.strip()
+    if ":" not in index:
+        return int(index)
+
+    parts = index.split(":")
+    if len(parts) > 3:
+        raise ValueError(f"Invalid slice string: {index!r}.")
+    return slice(*(int(part) if part.strip() != "" else None for part in parts))
+
+
+def save_dataset_slice(dataset_fp: str,
+                       index: slice | int | str):
+    """
+    Save a sliced version of an .xyz file without loading the full ASE.atoms object,
+    useful for large datasets.
+
+    dataset_fp (str): dataset filepath
+    index: same as for any list indexing (see parse_index for accepted string formats):
+        index=0: first configuration
+        index=-2: second to last
+        index=':' or index=slice(None): all
+        index='-3:' or index=slice(-3, None): three last
+        index='::2' or index=slice(0, None, 2): even
+        index='1::2' or index=slice(1, None, 2): odd
+    """
+    index = parse_index(index)
+
+    ds_name = get_name_from_path(dataset_fp)
+    out_dir = '/'.join(dataset_fp.split('/')[0:-1])
+
+    # get config offsets in file
+    logger.info("Counting input configurations...")
+    offsets = get_xyz_config_offsets(dataset_fp)
+    n = len(offsets)
+    logger.info(f"Total num configs in input dataset: {n}")
+
+    # offsets[index] is a single (start, end) tuple for an int index, rather than a list
+    # of them as for a slice index, so normalise it to a list either way
+    sliced_offsets = offsets[index] if isinstance(index, slice) else [offsets[index]]
+
+    out_fp, frame_counter = f"{out_dir}/{ds_name}_sliced.xyz", 0
+    with open(dataset_fp, "r") as f, open(out_fp, mode="w") as out_file:
+        for start_offset, end_offset in sliced_offsets:
+            f.seek(start_offset)  # jump to config start
+            frame = f.read(end_offset - start_offset)  # Read only this frame
+            out_file.write(frame)
+            frame_counter += 1
+
+    logger.info(f"Successfully saved sliced {ds_name}, with {frame_counter} configs...")
+
+
 def flexible_ase_read(fpath: str,
                       cust_props_parser: Callable = None,
-                      ) -> List[ase.Atoms]:
+                      ) -> list[ase.Atoms]:
     """
-    FLexible reader for ase .xyz or .extxyz files which handles different energy / force labels.
+    Flexible reader for ase .xyz or .extxyz files which handles different energy / force labels.
     """
 
     if cust_props_parser is not None:
@@ -825,14 +897,21 @@ def substitute_yaml_variables(value: dict, variables: dict):
     """
     Little recursive function to fill in YAML variables based on its own defined variable names.
 
+    A ``${name}`` reference is only filled in when ``variables`` sets that name to something
+    other than None: a reference to a field this YAML does not set (or sets to null) is left as
+    written, so the field is reported as unresolved instead of quietly becoming the string
+    'None'. So a field referenced this way is always optional, and only substituted when it is
+    actually specified.
+
     USAGE: yaml_config = substitute_yaml_variables(yaml_config, yaml_config)
     """
     if isinstance(value, str):
-        return re.sub(
-            r"\$\{(\w+)\}",
-            lambda match: str(variables.get(match.group(1), match.group(0))),
-            value,
-        )
+
+        def _replace(match):
+            replacement = variables.get(match.group(1))
+            return match.group(0) if replacement is None else str(replacement)
+
+        return re.sub(r"\$\{(\w+)\}", _replace, value)
     elif isinstance(value, list):
         return [substitute_yaml_variables(item, variables) for item in value]
     elif isinstance(value, dict):

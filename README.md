@@ -36,7 +36,7 @@ Notes:
 conda create -n fair_chem python=3.14 -c conda-forge
 conda activate fair_chem
 pip install fairchem-core
-pip install -e . --no-deps          # once, from this repository: provides the `rmlt` command
+pip install -e .                    # once, from this repository: provides the `rmlt` command
 hf auth login                       # login to hugging face, required to access UMA models after autorization (see https://github.com/facebookresearch/fairchem), will save an access token to your local machine
 ```
 

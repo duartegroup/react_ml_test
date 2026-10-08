@@ -3,10 +3,12 @@ Config file containing file paths for data and outputs, and other general settin
 """
 import os
 import platform
+import random
 from string import Template
-from typing import List, Literal, NamedTuple
+from typing import List, Literal, NamedTuple, Optional
 
 import matplotlib.pyplot as plt
+from matplotlib.colors import to_hex, to_rgb
 
 #  os.environ.get("USER")
 
@@ -48,6 +50,80 @@ PAPER_MODEL_COLOURS = {"GO-MACE-23": '#B82373',
                        "MACE-NEB": "purple",
                        "REF": "grey"
                        }
+
+# sentinel for get_model_colour's ``default``: fall back to a random tab10 colour (so a fixed
+# colour is asked for by name, and ``default=None`` still means 'return None when unmatched')
+_RANDOM_TAB10_COLOUR = object()
+
+# how close (in RGB) a tab10 colour may come to one already in PAPER_MODEL_COLOURS before it
+# counts as the same colour in the fallback above
+_MIN_FALLBACK_COLOUR_DISTANCE = 0.05
+
+
+def get_model_colour(model_name: str,
+                     default: object = _RANDOM_TAB10_COLOUR) -> Optional[str]:
+    """
+    Colour a model is plotted in, looked up flexibly from PAPER_MODEL_COLOURS.
+
+    A model takes a colour when one of the PAPER_MODEL_COLOURS keys is a stub of its name, so a
+    fine-tuned / from-scratch run (e.g. 'MACE-OFF23_medium_<train_name>_<n>_config_fine_tuned')
+    is coloured as its base model without needing an entry of its own. The longest matching stub
+    wins, so a name matching several stubs is coloured the same way whatever order the colour map
+    is written in.
+
+    A model matching no stub gets a random tab10 colour that no PAPER_MODEL_COLOURS entry
+    already uses (see _random_model_colour); pass ``default`` to get a fixed colour, or None to
+    detect the unmatched case instead of colouring it (as the input validation does).
+
+    :param model_name: model name (or plot label) to look a colour up for
+    :param default: colour used when no PAPER_MODEL_COLOURS key is a stub of the name, or None
+                    to return None for such a name
+    :return: the colour, or ``default`` (None) when the name has no mapped colour
+    """
+    matching_stubs = [stub for stub in PAPER_MODEL_COLOURS if stub in model_name]
+    if matching_stubs:
+        return PAPER_MODEL_COLOURS[max(matching_stubs, key=len)]
+    if default is not _RANDOM_TAB10_COLOUR:
+        return default
+
+    return _random_model_colour(model_name)
+
+
+def _random_model_colour(model_name: str) -> str:
+    """
+    A random tab10 colour for a model that has no colour in PAPER_MODEL_COLOURS.
+
+    Drawn from the tab10 colours no PAPER_MODEL_COLOURS entry already uses, seeded by the model
+    name so that a model keeps its colour across every figure and every run rather than changing
+    from plot to plot. Two unmatched models can still draw the same colour.
+    """
+    free_colours = _tab10_colours_free_of_paper_colours()
+    if not free_colours:
+        # every tab10 colour is mapped already, so the exclusion above cannot be honoured
+        free_colours = [to_hex(plt.cm.tab10(index)) for index in range(10)]
+
+    return random.Random(model_name).choice(free_colours)
+
+
+def _tab10_colours_free_of_paper_colours() -> List[str]:
+    """The tab10 colours that are not a colour PAPER_MODEL_COLOURS already uses."""
+
+    def rgb_distance(rgb_a: tuple, rgb_b: tuple) -> float:
+        return sum((a - b) ** 2 for a, b in zip(rgb_a, rgb_b)) ** 0.5
+
+    paper_rgbs = [to_rgb(colour) for colour in PAPER_MODEL_COLOURS.values()]
+    free_colours = []
+    for index in range(10):
+        colour = to_hex(plt.cm.tab10(index))
+        # a small tolerance, so a near repeat counts as a match - tab10's grey (#7f7f7f) against
+        # PAPER_MODEL_COLOURS' 'grey' (#808080), say, as well as exact repeats such as the
+        # tab10 blue that MACE-OFF23_medium uses
+        if all(rgb_distance(to_rgb(colour), paper_rgb) > _MIN_FALLBACK_COLOUR_DISTANCE
+               for paper_rgb in paper_rgbs):
+            free_colours.append(colour)
+
+    return free_colours
+
 
 ANI_MODELS = ["ani-1xnr"]
 

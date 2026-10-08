@@ -6,11 +6,11 @@ import glob
 import os
 
 import ase.io
-
 from mlptrain.utils import orca_output_to_npz
 
 from react_ml_test_public.helpers import inputs as rmlt_inputs
 from react_ml_test_public.helpers.logging import logger
+from react_ml_test_public.helpers.utils import natural_sort_key
 
 if __name__ == "__main__":
 
@@ -57,7 +57,7 @@ if __name__ == "__main__":
     del resolved
 
     # get out_fpaths
-    out_fpaths = glob.glob(os.path.join(work_dir, f"**/*{input_name}_*.out"), recursive=True)
+    out_fpaths = sorted(glob.glob(os.path.join(work_dir, f"**/*{input_name}_*.out"), recursive=True), key=natural_sort_key)
 
     logger.info(f"Saving the {input_name} ORCA outputs under {work_dir}...")
     orca_output_to_npz(out_fpaths, input_name, work_dir)

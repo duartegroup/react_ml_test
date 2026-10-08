@@ -12,8 +12,6 @@ import ase
 import numpy as np
 import pandas as pd
 import torch
-from mace.calculators import MACECalculator
-from mace.tools.utils import AtomicNumberTable
 from sklearn.linear_model import Ridge
 from sklearn.metrics import r2_score
 
@@ -236,7 +234,7 @@ def guess_per_element_mean_energies(
             energies = cache_data['energies']
         else:
             if calc is None:
-                raise OSError(f"NO MODEL CALCULATOR, AND NO NPZ CACHE FOUND for {model_name}. Add {model_name} to ./models and try again.")
+                raise OSError(f"NO MODEL CALCULATOR, AND NO NPZ CACHE FOUND for {calc_name}. Add {calc_name} to ./models and try again.")
             print('Calculating energies...')
             # calculate energies
             energies = []
@@ -276,12 +274,15 @@ def get_formatted_model_name(model_name: str):
     return FORMATTED_MODEL_NAMES.get(model_name) if model_name in FORMATTED_MODEL_NAMES.keys() else model_name
 
 
-def add_to_mace_z_table(calc: MACECalculator, 
+def add_to_mace_z_table(calc, 
                         atom_nums: list[int]):
     """
     Add new atomic numbers to a mace calculator internal z table 
     (for predictions outside of trained elements).
+
+    calc: MACECalculator
     """
+    from mace.tools.utils import AtomicNumberTable
     calc.z_table = AtomicNumberTable(list(set(calc.z_table.zs + atom_nums)))
 
 def natural_sort_key(s):

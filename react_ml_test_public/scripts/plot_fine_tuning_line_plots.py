@@ -11,9 +11,9 @@ from react_ml_test_public.helpers.plot import line_plot
 from react_ml_test_public.helpers.settings import (
     CSV_DIR,
     MACE_MODELS,
-    PAPER_MODEL_COLOURS,
     PLOT_DIR,
     PlotSettings,
+    get_model_colour,
 )
 from react_ml_test_public.helpers.utils import get_formatted_model_name
 
@@ -160,16 +160,18 @@ if __name__ == "__main__":
                                 for run_name in run_names]  # from scratch run
         reference_indices = [len(dataset_labels) - i for i in range(1, (len(dataset_labels) // 2) + 1)]
         cust_legend_linestyles = ['-', 'dotted'] * len(models)
-        colour_list = [colour for label in dataset_labels for model_name, colour in PAPER_MODEL_COLOURS.items() if model_name in label]
-        cust_legend_colours = [list(PAPER_MODEL_COLOURS.values())[i] for i in [k for j in range(len(models)) for k in [j, j]]]  # for three models with from scratch training
+        colour_list = [get_model_colour(label) for label in dataset_labels]
+        # one colour per legend entry ([model FT, model Scratch] pairs), i.e. two per model
+        cust_legend_colours = [colour for model_name, _ in models
+                               for colour in [get_model_colour(model_name)] * 2]
         cust_legend_labels = [label for model_name, _ in models for label in [f"{get_formatted_model_name(model_name)} FT", f"{get_formatted_model_name(model_name)} Scratch"]]
         x_datasets = [x_data for _ in range(0, len(fine_tuned_csv_fpaths))] + [x_data[1:] for _ in range(0, len(from_scratch_csv_fpaths))]   # don't include pretrained model in from scratch
     
     else:
         from_scratch_csv_fpaths = []
         cust_legend_linestyles = ['-'] * len(models)
-        colour_list = [colour for label in dataset_labels for model_name, colour in PAPER_MODEL_COLOURS.items() if model_name in label]
-        cust_legend_colours = [PAPER_MODEL_COLOURS.get(model_name) for model_name, _ in models]  # for three models without from scratch training 
+        colour_list = [get_model_colour(label) for label in dataset_labels]
+        cust_legend_colours = [get_model_colour(model_name) for model_name, _ in models]  # for three models without from scratch training
         cust_legend_labels = [f"{get_formatted_model_name(model_name)} FT" for model_name, _ in models]
         x_datasets = [x_data for _ in range(0, len(fine_tuned_csv_fpaths))]
     

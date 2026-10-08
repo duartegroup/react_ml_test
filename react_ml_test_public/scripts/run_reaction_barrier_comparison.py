@@ -50,6 +50,9 @@ if __name__ == "__main__":
 
         test_trj_fpath:         # path to the IRC trajectory .xyz to compare against, taken to be
                                 # relative to data_dir when it does not resolve from the cwd.
+                                # Optionally templated on another field of this YAML with a
+                                # ${var} reference, e.g. "test/.../wB97M-V/${save_name}.xyz"
+                                # (filled in from save_name, or any other field set above).
         custom_xyz_parser:      # "orca_props_parser" / "autode_props_parser" /
                                 # "hartree_props_parser" (REF_energy=<float> in Hartree) / empty.
         include_forces:         # whether to also compare force norms.
@@ -65,6 +68,10 @@ if __name__ == "__main__":
         cust_legend_labels:     # legend labels for the reference (DFT) line.
         cust_legend_linestyles: # legend line styles for the reference (DFT) line.
         ref_point_labels:       # labels for the RS / TS / PS reference points (or empty).
+        fair_chem_task:         # FairChem only: the task a FAIRCHEM_MODELS entry runs as, e.g.
+                                # "omol" for molecules. Ignored by the other model loaders.
+        fair_chem_setting:      # FairChem only: e.g. "turbo", fairchem's inference settings.
+                                # Ignored by the other model loaders.
         cuda_device:            # GPU device for the MLIP calculators (default "cuda:0",
                                 # falls back to "cpu" if that device is not found).
 
@@ -120,6 +127,8 @@ if __name__ == "__main__":
     cust_legend_labels = resolved["cust_legend_labels"]
     cust_legend_linestyles = resolved["cust_legend_linestyles"]
     ref_point_labels = resolved["ref_point_labels"]
+    fair_chem_task = resolved["fair_chem_task"]
+    fair_chem_setting = resolved["fair_chem_setting"]
     energy_units = resolved["energy_units"]
     energies_ylim = resolved["energies_ylim"]
     forces_ylim = resolved["forces_ylim"]
@@ -160,4 +169,6 @@ if __name__ == "__main__":
                                 cuda_device=cuda_device,
                                 plot_dir=plot_dir,
                                 csv_dir=csv_dir,
-                                model_dir=model_dir)
+                                model_dir=model_dir,
+                                fair_chem_task=fair_chem_task,
+                                fair_chem_setting=fair_chem_setting)

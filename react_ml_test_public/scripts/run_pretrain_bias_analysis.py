@@ -37,13 +37,13 @@ from react_ml_test_public.helpers.settings import (
     MEV,
     MEV_PER_AMSTRONG,
     NPZ_DIR,
-    PAPER_MODEL_COLOURS,
     PAPER_MODELS,
     PLOT_DIR,
     SIMILARITIES_DIR,
     SINGLE_COLUMN_FIG_SIZE,
     PlotSettings,
     eV_to_mEV,
+    get_model_colour,
 )
 from react_ml_test_public.helpers.stats import (
     calculate_rmse_on_errors,
@@ -264,7 +264,7 @@ def category_scatter_plot(all_series: list[np.array],
     n = 3
     major_offsets = [(k - (n - 1) / 2) * 0.16 for k in range(n)]
     for i, model_series in enumerate(all_series):
-        colour = PAPER_MODEL_COLOURS[base_model_names[i]]
+        colour = get_model_colour(base_model_names[i])
         for j, series in enumerate(model_series):
 
             neg_mask = series > 0
@@ -731,7 +731,7 @@ if __name__ == "__main__":
             lot_ft_force_corr = np.nan_to_num(np.corrcoef(subset_ft_force_errors, subset_lot_force_errors)[0, 1], nan=0.0)
             lot_full_ft_force_corr = np.nan_to_num(np.corrcoef(subset_full_ft_force_errors, subset_lot_force_errors)[0, 1], nan=0.0)
 
-            colour = PAPER_MODEL_COLOURS[model_name]
+            colour = get_model_colour(model_name)
             plt_save_fp_base = f"{PLOT_DIR}/descriptors/{model_name}_{test_name}"
 
             correlation_summary_rows.extend([
@@ -776,8 +776,8 @@ if __name__ == "__main__":
                         [x[0] for x in corr_plot_datasets[0:3]], 
                         alphas=corr_plot_alphas, 
                         # alphas=[0.3, 0.3, 0.3], 
-                        colours=generate_shades(PAPER_MODEL_COLOURS[model_name]), 
-                        x_label=None, #r"Lot Force Norm Error (meV / $\AA$)", 
+                        colours=generate_shades(get_model_colour(model_name)),
+                        x_label=None, #r"Lot Force Norm Error (meV / $\AA$)",
                         y_label=None, # r"Pred. Force Norm Error (meV / $\AA$)", 
                         # colours=list(plt.get_cmap("tab10").colors)[0:3], 
                         labels=labels,
@@ -796,8 +796,8 @@ if __name__ == "__main__":
                         [x[0] for x in corr_plot_datasets[3:6]], 
                         alphas=corr_plot_alphas, 
                         # alphas=[0.3, 0.3, 0.3], 
-                        colours=generate_shades(PAPER_MODEL_COLOURS[model_name]), 
-                        # colours=list(plt.get_cmap("tab10").colors)[0:3], 
+                        colours=generate_shades(get_model_colour(model_name)),
+                        # colours=list(plt.get_cmap("tab10").colors)[0:3],
                         x_label=None, #r'1 - sim_a',
                         y_label=None, #r"Pred. Force Norm Error (meV / $\AA$)", 
                         labels=labels,
@@ -942,14 +942,14 @@ if __name__ == "__main__":
 
     # bar plot of lot MAEs
     save_fp = f'{PLOT_DIR}/descriptors/{test_name}_model_lot_maes.png'
-    plot_settings = PlotSettings(custom_colour_list=[PAPER_MODEL_COLOURS[model_name] for model_name in model_names], 
+    plot_settings = PlotSettings(custom_colour_list=[get_model_colour(model_name) for model_name in model_names],
                                  show_legend=False, x_label='Config Type', y_label=r'$\bar{LoT_a}$'
                                 )
     bar_plot(all_lot_force_maes, subset_names, model_names, save_fp=save_fp, plot_settings=plot_settings, show_x_tick_labels=True)
 
     # bar plot of absolute similarities!
     save_fp = f'{PLOT_DIR}/descriptors/{test_name}_model_abs_sims.png'
-    plot_settings = PlotSettings(custom_colour_list=[PAPER_MODEL_COLOURS[model_name] for model_name in model_names], 
+    plot_settings = PlotSettings(custom_colour_list=[get_model_colour(model_name) for model_name in model_names],
                                  show_legend=False, x_label='Config Type', y_label=r'$\bar{sim_a}$'
                                 )
     bar_plot(all_config_sim_scores, subset_names, model_names, save_fp=save_fp, plot_settings=plot_settings, show_x_tick_labels=True)

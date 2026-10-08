@@ -14,6 +14,8 @@ function in this module that takes in and processes the YAML for that script:
     resolve_save_dft_inputs_yaml(...)              -> save_dft_inputs_from_xyz.py
     resolve_check_orca_output_yaml(...)            -> check_orca_output.py
     resolve_save_orca_out_to_xyz_yaml(...)         -> save_orca_out_to_xyz.py
+    resolve_save_dataset_slice_yaml(...)           -> save_dataset_slice.py
+    resolve_save_dataset_batches_yaml(...)         -> save_dataset_batches.py
 
 Each function performs the shared file checks / parsing / ``${var}`` substitution
 (via ``_load_yaml_config``) followed by that script's own field resolution and
@@ -47,9 +49,9 @@ from react_ml_test_public.helpers.settings import (
     MEV_PER_ATOM,
     OPT_DIR,
     OUT_DIR,
-    PAPER_MODEL_COLOURS,
     TRAJ_DIR,
     expand_env_vars,
+    get_model_colour,
     resolve_csv_dir,
     resolve_data_path,
     resolve_md_checkpoint_dir,
@@ -160,6 +162,16 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
     ``test_trj_fpath`` that does not resolve from the current working directory is taken to be
     relative to ``data_dir``, and plots / CSVs are written under ``out_dir`` (see
     ``resolve_out_dirs``).
+
+    ``test_trj_fpath`` (and every other string field) may reference another field of this YAML
+    with a ``${var}`` reference, e.g. ``test/cluster/epoxide/wB97M-V/${save_name}.xyz``, which is
+    filled in from ``save_name`` (see ``substitute_yaml_variables``). The reference is optional:
+    a field spelled out literally is used as given, and a reference to a field this YAML does not
+    set is left unresolved and reported as a config error.
+
+    The optional ``fair_chem_task`` (e.g. ``"omol"`` for molecules) and ``fair_chem_setting``
+    (e.g. ``"turbo"``) fields configure a FairChem model listed in ``model_names``, exactly as
+    they do for run_mlip_md.py's YAML; they are ignored by the other model loaders.
     """
     input_config = _load_yaml_config(input_yaml_fpath, parser)
 
@@ -215,6 +227,13 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
     cust_legend_labels = input_config.get("cust_legend_labels", ["DFT"])
     cust_legend_linestyles = input_config.get("cust_legend_linestyles", ["dashed"])
     ref_point_labels = input_config.get("ref_point_labels", None)
+
+    # FairChem only: the task a fairchem model is run as (e.g. 'omol' for molecules) and its
+    # inference settings (e.g. 'turbo'). Ignored by the other model loaders.
+    fair_chem_task = input_config.get("fair_chem_task", None)
+    fair_chem_task = str(fair_chem_task) if fair_chem_task is not None else None
+    fair_chem_setting = input_config.get("fair_chem_setting", None)
+    fair_chem_setting = str(fair_chem_setting) if fair_chem_setting is not None else None
 
     energies_ylim = _parse_ylim(input_config.get("energies_ylim", None))
     forces_ylim = _parse_ylim(input_config.get("forces_ylim", None))
@@ -282,6 +301,8 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
         "cust_legend_labels": cust_legend_labels,
         "cust_legend_linestyles": cust_legend_linestyles,
         "ref_point_labels": ref_point_labels,
+        "fair_chem_task": fair_chem_task,
+        "fair_chem_setting": fair_chem_setting,
         "cuda_device": str(input_config.get("cuda_device", "cuda:0")),
     }
 
@@ -348,9 +369,9 @@ def resolve_pretrain_bias_analysis_yaml(input_yaml_fpath: str, parser=None):
     if len(model_names) != num_models:
         _error(f"'model_names' must have one entry per 'input_lot_test_fpaths' entry "
                f"({num_models}), got {len(model_names)}.")
-    missing_colours = [name for name in model_names if name not in PAPER_MODEL_COLOURS]
+    missing_colours = [name for name in model_names if get_model_colour(name, default=None) is None]
     if missing_colours:
-        _error(f"Model names missing from PAPER_MODEL_COLOURS (needed for plot colours): "
+        _error(f"Model names matching no PAPER_MODEL_COLOURS stub (needed for plot colours): "
                f"{missing_colours}")
     model_plt_labels = input_config.get("model_plt_labels", None)
     if model_plt_labels is None:
@@ -1248,6 +1269,75 @@ def resolve_check_orca_output_yaml(input_yaml_fpath: str, parser=None):
     return {
         "work_dir": work_dir,
         "input_name": input_name,
+    }
+
+
+def resolve_save_dataset_slice_yaml(input_yaml_fpath: str, parser=None):
+    """Load + process the input YAML for save_dataset_slice.py.
+
+    The YAML names the dataset .xyz to slice (``dataset_fp``) and the slice to save
+    (``index``, anything ``helpers.io.save_dataset_slice`` accepts - an int, a slice
+    string like ``'::10'``, or ``':'`` for the whole dataset). Both fields are required,
+    and both are returned as the script's ``__main__`` declares them, alongside the
+    resolved ``data_dir``.
+
+    A relative ``dataset_fp`` that does not resolve from the current working directory is
+    taken to be relative to the optional ``data_dir`` field (default ``DATA_DIR``).
+    """
+    input_config = _load_yaml_config(input_yaml_fpath, parser)
+
+    def _need(key):
+        value = input_config.get(key, None)
+        if value is None:
+            _error(parser, f"Missing required field '{key}' in input YAML.")
+        return value
+
+    # ===== DATASET AND SLICE TO SAVE =====
+    data_dir = input_config.get("data_dir", DATA_DIR)
+    dataset_fp = resolve_data_path(str(_need("dataset_fp")), data_dir)
+    if not os.path.isfile(dataset_fp):
+        _error(parser, f"dataset_fp not found: {dataset_fp!r} (relative paths are taken as "
+                       f"relative to data_dir: {data_dir!r}).")
+    index = _need("index")
+
+    return {
+        "data_dir": data_dir,
+        "dataset_fp": dataset_fp,
+        "index": index,
+    }
+
+
+def resolve_save_dataset_batches_yaml(input_yaml_fpath: str, parser=None):
+    """Load + process the input YAML for save_dataset_batches.py.
+
+    The YAML names the dataset .xyz to split (``dataset_fp``) and the number of
+    configurations per output batch (``batch_size``). Both fields are required, and both
+    are returned as the script's ``__main__`` declares them, alongside the resolved
+    ``data_dir``.
+
+    A relative ``dataset_fp`` that does not resolve from the current working directory is
+    taken to be relative to the optional ``data_dir`` field (default ``DATA_DIR``).
+    """
+    input_config = _load_yaml_config(input_yaml_fpath, parser)
+
+    def _need(key):
+        value = input_config.get(key, None)
+        if value is None:
+            _error(parser, f"Missing required field '{key}' in input YAML.")
+        return value
+
+    # ===== DATASET AND BATCH SIZE =====
+    data_dir = input_config.get("data_dir", DATA_DIR)
+    dataset_fp = resolve_data_path(str(_need("dataset_fp")), data_dir)
+    if not os.path.isfile(dataset_fp):
+        _error(parser, f"dataset_fp not found: {dataset_fp!r} (relative paths are taken as "
+                       f"relative to data_dir: {data_dir!r}).")
+    batch_size = int(_need("batch_size"))
+
+    return {
+        "data_dir": data_dir,
+        "dataset_fp": dataset_fp,
+        "batch_size": batch_size,
     }
 
 

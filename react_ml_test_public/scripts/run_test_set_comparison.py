@@ -45,6 +45,7 @@ from react_ml_test_public.helpers.settings import (
     SINGLE_COLUMN_FIG_SIZE,
     I_Cl_SN2_DATA_DIR,
     PlotSettings,
+    get_model_colour,
 )
 from react_ml_test_public.helpers.stats import calculate_rmse_on_errors, moving_rmse
 from react_ml_test_public.helpers.utils import (
@@ -530,10 +531,13 @@ if __name__ == "__main__":
     #                                     energies_ylim=(0.0, 20.0), forces_ylim=(0.0, 200.0))
 
     # comparison to reference set too
-    global_plot_settings = global_plot_settings._replace(custom_colour_list = [x for colour in PAPER_MODEL_COLOURS.values() for x in [colour] * num_base_model_comps], 
-                                                         custom_linestyle_list=['-'] * len(model_names), 
+    # one colour per model, so the colours follow the models rather than the order of
+    # PAPER_MODEL_COLOURS (the plot helpers index the list per dataset / model)
+    model_colours = [get_model_colour(model_name) for model_name in model_names]
+    global_plot_settings = global_plot_settings._replace(custom_colour_list = model_colours,
+                                                         custom_linestyle_list=['-'] * len(model_names),
                                                          custom_alpha_list=alpha_list * num_base_models, # (len(model_names) // 2),
-                                                         cust_legend_colours = [x for colour in PAPER_MODEL_COLOURS.values() for x in [colour] * num_base_model_comps],
+                                                         cust_legend_colours = model_colours,
                                                          show_legend=False,
                                                          #  cust_legend_labels = [f"{get_formatted_model_name(model_name)}" for model_name in PAPER_MODELS] + [f"{get_formatted_model_name(model_name)} TS FT"  for model_name in PAPER_MODELS],
                                                          cust_legend_labels = [label for model_name in model_names for label in [f"{get_formatted_model_name(model_name)}", f"{get_formatted_model_name(model_name)} FT"]],

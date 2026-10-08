@@ -1,0 +1,20 @@
+# save_dataset_batches.py input YAML - split the GO-MACE-23 training set into batches.
+
+# Run with:
+#   rmlt save-dataset-batches inputs/dataset/save_dataset_batches.yaml
+
+# Paths are relative to the repository root (or data_dir, see below).
+
+# ---- dataset to split ----
+dataset_fp: data/datasets/go_mace/GO-MACE-23_train.xyz
+# dataset_fp: data/datasets/spice/spice_train.xyz             # spice training set
+# dataset_fp: data/datasets/mace_mp0/mace_mp0_mptrj_data.xyz   # mace_mptrj
+# dataset_fp: data/datasets/ani/ANI-1xnr.xyz                   # ani
+
+# ---- batch size ----
+batch_size: 500
+
+# ---- run settings ----
+# data_dir defaults to the DATA_DIR of settings.py; set it to read from somewhere other
+# than the directory the run was started from
+# data_dir: "$DATA/data"

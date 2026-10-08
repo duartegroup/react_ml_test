@@ -25,6 +25,7 @@ from react_ml_test_public.helpers.settings import (
     TRAJ_DIR,
     BondDef,
     ConfigDef,
+    get_model_colour,
 )
 from react_ml_test_public.helpers.stats import aligned_rmsd, calculate_rmse
 from react_ml_test_public.helpers.traj_eval import (
@@ -39,13 +40,11 @@ from react_ml_test_public.helpers.utils import (
 
 def paper_colour(model_name: str) -> str:
     """Colour of a model trajectory label, matched to its base paper model."""
-    for base_model_name, colour in PAPER_MODEL_COLOURS.items():
-        if model_name == base_model_name or model_name.startswith(f"{base_model_name}_"):
-            return colour
     # fine-tuned MACE-OFF labels use the shortened 'MACE-OFF23' stem
     if model_name.startswith("MACE-OFF23_"):
         return PAPER_MODEL_COLOURS["MACE-OFF23_medium"]
-    return "grey"
+
+    return get_model_colour(model_name)
 
 
 if __name__ == "__main__":

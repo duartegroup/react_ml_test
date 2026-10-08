@@ -1,0 +1,19 @@
+# save_dataset_slice.py input YAML - slice of the GO-MACE-23 training set.
+
+# Run with:
+#   rmlt save-dataset-slice inputs/dataset/save_dataset_slice.yaml
+
+# Paths are relative to the repository root (or data_dir, see below).
+
+# ---- dataset to slice ----
+dataset_fp: data/datasets/go_mace/GO-MACE-23_train.xyz
+
+# ---- slice to save ----
+# same as for any list indexing, e.g. 0 (first), -2 (second to last), ':' (all),
+# '-3:' (three last), '::2' (even), '1::2' (odd)
+index: "::10"
+
+# ---- run settings ----
+# data_dir defaults to the DATA_DIR of settings.py; set it to read from somewhere other
+# than the directory the run was started from
+# data_dir: "$DATA/data"

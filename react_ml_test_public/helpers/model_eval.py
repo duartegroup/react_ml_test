@@ -8,7 +8,7 @@ from typing import Callable, Literal, Tuple, List
 import numpy as np
 from react_ml_test_public.helpers.io import flexible_ase_read, get_name_from_path, load_isolated_atom_energies, load_data_cache, load_model_calculator, save_npz_data_cache
 from react_ml_test_public.helpers.plot import index_plot
-from react_ml_test_public.helpers.settings import CSV_DIR, EV, EV_PER_AMSTRONG, KCAL_PER_MOL, MEV, MEV_PER_AMSTRONG, MEV_PER_ATOM, NPZ_DIR, PAPER_MODEL_COLOURS, PLOT_DIR, PlotSettings, resolve_model_dir
+from react_ml_test_public.helpers.settings import CSV_DIR, EV, EV_PER_AMSTRONG, KCAL_PER_MOL, MEV, MEV_PER_AMSTRONG, MEV_PER_ATOM, NPZ_DIR, PLOT_DIR, PlotSettings, get_model_colour, resolve_model_dir
 from react_ml_test_public.helpers.stats import calculate_rmse_on_errors
 from react_ml_test_public.helpers.utils import convert_units, get_ase_props
 from react_ml_test_public.helpers.utils import calc_energy_shifts, guess_per_element_mean_energies
@@ -29,7 +29,9 @@ def get_model_predictions(model_name: str,
                           force_units: Literal[EV_PER_AMSTRONG, MEV_PER_AMSTRONG] = MEV_PER_AMSTRONG,
                           model_loader: str = None,
                           enable_cueq: bool = False,
-                          model_dir: str = None) -> list[np.ndarray]:
+                          model_dir: str = None,
+                          fair_chem_task: str = None,
+                          fair_chem_setting: str = None) -> list[np.ndarray]:
     """
     Generates predictions from one or more trained models on a given test dataset.
 
@@ -49,6 +51,10 @@ def get_model_predictions(model_name: str,
         force_units (Literal['meV', 'meV / A']): Desired output units for forces. Defaults to 'meV / A'.
         model_loader (str): Custom model loader (i.e. MACE, ACE, ANI...). Optional.
         enable_cueq (bool): Whether to enable cuequivariance acceleration. Defaults to False.
+        fair_chem_task (str): FairChem only - the task a fairchem model is run as, e.g. 'omol'
+                              for molecules. Optional, ignored by the other model loaders.
+        fair_chem_setting (str): FairChem only - the fairchem inference settings, e.g. 'turbo'.
+                                 Optional, ignored by the other model loaders.
 
     Returns:
         list[np.ndarray]: a list of predictions by the model for each specified test_set file
@@ -61,7 +67,9 @@ def get_model_predictions(model_name: str,
                                        device=cuda_device,
                                        model_loader=model_loader,
                                        enable_cueq=enable_cueq,
-                                       model_dir=model_dir)
+                                       model_dir=model_dir,
+                                       fair_chem_task=fair_chem_task,
+                                       fair_chem_setting=fair_chem_setting)
 
     model_pred_energies, model_pred_forces = [], []
     for j, test_set_fpath in enumerate(test_set_fpaths):
@@ -79,18 +87,18 @@ def get_model_predictions(model_name: str,
             elif offset_ref_fpath is not None:
                 logger.info(f"Getting model prediction per-element average offsets from {offset_ref_fpath}...")
                 pred_energy_offsets = guess_per_element_mean_energies(offset_ref_fpath,
-                                                                    calc=calculator,
-                                                                    calc_name=model_name,
-                                                                    dtype=np.float32,
-                                                                    pbc_box=pbc_box,
+                                                                        calc=calculator,
+                                                                        calc_name=model_name,
+                                                                        dtype=np.float32,
+                                                                        pbc_box=pbc_box,
                                                                     )
             else:
                 logger.info(f"Getting model prediction per-element average offsets based on test set: {test_set_fpath}...")
                 pred_energy_offsets = guess_per_element_mean_energies(test_set_fpath,
-                                                                    calc=calculator,
-                                                                    calc_name=model_name,
-                                                                    dtype=np.float32,
-                                                                    pbc_box=pbc_box,
+                                                                      calc=calculator,
+                                                                      calc_name=model_name,
+                                                                      dtype=np.float32,
+                                                                      pbc_box=pbc_box,
                                                                     )
         logger.info(f"Model: {model_name} Per-element means: {pred_energy_offsets}")
 
@@ -151,7 +159,9 @@ def get_test_and_pred_data(model_names: List[str],
                            model_loaders: List[str] = None,
                            enable_cueq: bool = False,
                            config_type_filter: str = None,
-                           model_dir: str = None) -> Tuple[list, list, dict, dict]:
+                           model_dir: str = None,
+                           fair_chem_task: str = None,
+                           fair_chem_setting: str = None) -> Tuple[list, list, dict, dict]:
     """
     Get the test and predicted energies / forces for a set of test sets with a set of models.
 
@@ -169,6 +179,10 @@ def get_test_and_pred_data(model_names: List[str],
         force_units (Literal['meV', 'meV / A']): Output units for forces. Defaults to 'meV / A'.
         model_loaders (List[str]): Custom model loaders. Optional.
         enable_cueq (bool): Whether to enable cuequivariance acceleration. Defaults to False.
+        fair_chem_task (str): FairChem only - the task a fairchem model is run as, e.g. 'omol'
+                              for molecules. Optional, ignored by the other model loaders.
+        fair_chem_setting (str): FairChem only - the fairchem inference settings, e.g. 'turbo'.
+                                 Optional, ignored by the other model loaders.
 
     Returns:
         Tuple[list, list, dict, dict]: two lists of test energies / forces and two dicts of per-model pred energies / forces.
@@ -233,7 +247,9 @@ def get_test_and_pred_data(model_names: List[str],
                                                                        energy_units=energy_units,
                                                                        force_units=force_units,
                                                                        model_loader=model_loader,
-                                                                       enable_cueq=enable_cueq)
+                                                                       enable_cueq=enable_cueq,
+                                                                       fair_chem_task=fair_chem_task,
+                                                                       fair_chem_setting=fair_chem_setting)
 
         # add predictions to dictionary for each model
         all_pred_energies_dict[model_name] = model_pred_energies
@@ -269,7 +285,9 @@ def reaction_barrier_comparison(model_names: List[str],
                                 cuda_device: str = "cuda:0",
                                 plot_dir: str = None,
                                 csv_dir: str = None,
-                                model_dir: str = None):
+                                model_dir: str = None,
+                                fair_chem_task: str = None,
+                                fair_chem_setting: str = None):
     """
     Compare a selection of MLIP models along an IRC trajectory, and write the resulting
     energy-error / reaction-profile / force-error plots and per-model CSV to disk.
@@ -295,8 +313,9 @@ def reaction_barrier_comparison(model_names: List[str],
                               run_type == 'from_scratch'
     :param num_base_models: number of base models, i.e. how many times alpha_list / linestyle_list
                             are repeated
-    :param num_base_model_comps: number of comparisons per base model, i.e. how many times each
-                                 paper model colour is repeated
+    :param num_base_model_comps: number of comparisons per base model. Retained for the
+                                 input-YAML contract, but no longer used for the plot colours,
+                                 which are looked up per model name instead (get_model_colour)
     :param alpha_list: alpha values used for plotting, repeated num_base_models times.
                        Defaults to [1.0]
     :param linestyle_list: line style per base-model comparison, repeated num_base_models times.
@@ -318,6 +337,11 @@ def reaction_barrier_comparison(model_names: List[str],
     :param cuda_device: device for the MLIP calculators
     :param plot_dir: directory to write the plots to (default PLOT_DIR)
     :param csv_dir: directory to write the CSV to (default CSV_DIR)
+    :param model_dir: directory the listed models are loaded from (default MODEL_DIR)
+    :param fair_chem_task: FairChem only - the task a fairchem model is run as, e.g. 'omol'
+                           for molecules. Optional, ignored by the other model loaders.
+    :param fair_chem_setting: FairChem only - the fairchem inference settings, e.g. 'turbo'.
+                              Optional, ignored by the other model loaders.
     :return: None. The plots are written to plot_dir/irc and the CSV to csv_dir.
     """
 
@@ -357,7 +381,10 @@ def reaction_barrier_comparison(model_names: List[str],
         custom_linestyle_list = linestyle_list * num_base_models
         custom_alpha_list = alpha_list * num_base_models
         custom_zorder_list = [len(model_names) + 2 - i for i in range(len(model_names))]
-        colours = [x for colour in PAPER_MODEL_COLOURS.values() for x in [colour] * num_base_model_comps]
+
+        # colour each model by name, so fine-tuned / from-scratch runs inherit the colour of
+        # the base model whose name is a stub of theirs
+        colours = [get_model_colour(x) for x in model_names]
 
         # run comparison
         # get test set ground truth  and forces
@@ -371,7 +398,9 @@ def reaction_barrier_comparison(model_names: List[str],
                                                                                                                 energy_units=energy_units,
                                                                                                                 force_units=force_units,
                                                                                                                 cuda_device=cuda_device,
-                                                                                                                model_dir=model_dir)
+                                                                                                                model_dir=model_dir,
+                                                                                                                fair_chem_task=fair_chem_task,
+                                                                                                                fair_chem_setting=fair_chem_setting)
 
         combined_datasets = all_test_energies
         combined_datasets.extend([pred_energies
@@ -389,7 +418,7 @@ def reaction_barrier_comparison(model_names: List[str],
 
         # plot index plot of absolute energy errors
         plot_settings = PlotSettings(x_label='Index', y_label=f"Energy RMSE ({energy_units})", custom_colour_list=colours,
-                                    show_legend=False,
+                                    show_legend=show_legend,
                                     custom_alpha_list=custom_alpha_list,
                                     custom_linestyle_list=custom_linestyle_list)
         save_fp = f"{plot_dir}/irc/{test_set_name}_{save_name}_energy_errors.png"
@@ -481,7 +510,10 @@ def reaction_barrier_comparison(model_names: List[str],
             ref_peak_force_error = model_force_norm_errors[i][peak_pos] if include_forces else 'N/A'
             ref_peak_pos_error = peak_pos - ref_peak_pos
             product_energy = pred_energies[ref_prod_index]
-            csv_tuples.append((model_name, reactant_energy, product_energy, peak_energy, peak_pos, ref_prod_energy, ref_peak_energy, ref_peak_pos, ref_peak_energy_error, ref_peak_force_error, ref_peak_pos_error))
+            csv_tuples.append((model_name, float(reactant_energy), float(product_energy), float(peak_energy), int(peak_pos), 
+                               float(ref_prod_energy), float(ref_peak_energy), int(ref_peak_pos), float(ref_peak_energy_error), 
+                               float(ref_peak_force_error) if include_forces else 'N/A', 
+                               int(ref_peak_pos_error)))
 
         # save csv
         csv_save_fp = f"{csv_dir}/{test_set_name}_{save_name}.csv"
@@ -489,7 +521,7 @@ def reaction_barrier_comparison(model_names: List[str],
             writer = csv.writer(csv_file)
             header_row = ['Model', f'Reactant Energy {energy_units}', f'Product Energy {energy_units}', f'Peak Energy {energy_units}', 'Peak Position (Step)',
                             f'Ref Prod Energy {energy_units}', f'Ref Peak Energy {energy_units}', 'Ref Peak Position',
-                            f'Ref Peak Energy Error {energy_units}', f'Ref Peak Force Error {energy_units}', 'Ref Peak Position Error (Step)']
+                            f'Ref Peak Energy Error {energy_units}', f'Ref Peak Force Error {force_units}', 'Ref Peak Position Error (Step)']
             writer.writerow(header_row)
             print(header_row)
             writer.writerows(csv_tuples)
