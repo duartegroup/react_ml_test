@@ -106,7 +106,7 @@ def write_md_checkpoint(checkpoint_fpath: str,
 
     :param checkpoint_fpath: path of the YAML file to write (its directory is created).
     :param dynamics: the Langevin object to checkpoint.
-    :param total_steps: number of steps the whole run targets (``MDSettings.fs``).
+    :param total_steps: number of steps the whole run targets, i.e. ``int(MDSettings.fs / dt)``.
     :param output_name: name of the MD run, recorded for provenance.
     :param model_name: model the run uses, recorded for provenance.
     :param rng_seed: seed ``dynamics.rng`` was created from, recorded for provenance.
@@ -292,10 +292,11 @@ def get_trajectory_with_ase(init_config: ase.Atoms,
                                run (see md_checkpoint_fpath / write_md_checkpoint).
     :param load_md_checkpoint: path of a checkpoint to carry a previous run on from, instead
                                of starting this one from ``init_config`` - the checkpoint's
-                               frame, thermostat and RNG state are used, and the run takes
-                               the steps still missing from ``md_config.fs`` (which counts
-                               the steps of the whole run, not of this stretch). The existing
-                               trajectory is continued rather than overwritten, the checkpoint
+                               frame, thermostat and RNG state are used, and the run takes the
+                               steps still missing to reach ``md_config.fs`` of simulated time
+                               at the checkpoint's time step (i.e. of the whole run, not of
+                               this stretch). The existing trajectory is continued rather than
+                               overwritten, the checkpoint
                                is kept up to date in place (whether or not
                                ``save_md_checkpoints`` is set, so a resume is itself
                                resumable), and a missing/unreadable checkpoint is an error
@@ -381,9 +382,8 @@ def get_trajectory_with_ase(init_config: ase.Atoms,
         if temp != md_config.temp:
             logger.warning(f"Resuming {output_name} at the checkpoint's {temp} K, not the "
                            f"{md_config.temp} K the input asks for.")
-        if checkpoint.get('total_steps') is not None and int(checkpoint['total_steps']) != fs:
-            logger.warning(f"Resuming {output_name} from step {steps_done} of "
-                           f"{checkpoint['total_steps']} to a new target of {fs} steps.")
+        # compared against n_steps once dt (the checkpoint's) is settled, below
+        checkpoint_total_steps = checkpoint.get('total_steps')
         if checkpoint.get('model_name') not in (None, model_name):
             logger.warning(f"Resuming {output_name} from a checkpoint of "
                            f"{checkpoint['model_name']!r} with {model_name!r}.")
@@ -393,6 +393,20 @@ def get_trajectory_with_ase(init_config: ase.Atoms,
         # carries the random stream on to the resumed stretch
         rng_seed = int(np.random.SeedSequence().entropy)
         rng = np.random.default_rng(rng_seed)
+        checkpoint_total_steps = None
+
+    else:
+        checkpoint_total_steps = None
+
+    # fs is the run's target simulated time, not a step count - one ASE step advances it by
+    # dt fs, so it takes int(fs / dt) of them to reach fs. Using dt here (rather than
+    # md_config.dt) matters for a resumed run, which integrates at the checkpoint's time step.
+    n_steps = int(fs / dt)
+
+    if resuming and checkpoint_total_steps is not None and int(checkpoint_total_steps) != n_steps:
+        logger.warning(f"Resuming {output_name} from step {steps_done} of "
+                       f"{checkpoint_total_steps} to a new target of {n_steps} steps "
+                       f"({fs} fs at {dt} fs/step).")
 
     # load calculator (model_dir None -> MODEL_DIR, see resolve_model_dir; the last two
     # settings are FairChem's, and ignored by the other loaders)
@@ -464,7 +478,7 @@ def get_trajectory_with_ase(init_config: ase.Atoms,
     # writes too, whatever save_md_checkpoints says, since it was started from a checkpoint.
     if save_md_checkpoints or resuming:
         dynamics.attach(
-            lambda: write_md_checkpoint(checkpoint_fp, dynamics, total_steps=fs,
+            lambda: write_md_checkpoint(checkpoint_fp, dynamics, total_steps=n_steps,
                                         output_name=output_name, model_name=model_name,
                                         rng_seed=rng_seed),
             interval=checkpoint_interval_steps(checkpoint_every, dt),
@@ -489,22 +503,24 @@ def get_trajectory_with_ase(init_config: ase.Atoms,
         logger.info(f"No {traj_fp} to continue, starting it from the checkpoint's frame...")
         atoms.write(traj_fp, format='extxyz', append=True)
 
-    remaining_steps = fs - steps_done
+    remaining_steps = n_steps - steps_done
     if remaining_steps <= 0:
-        logger.info(f"Checkpoint is already at step {steps_done} of the {fs} steps "
-                    f"{output_name} targets, so there is nothing left to run.")
+        logger.info(f"Checkpoint is already at step {steps_done} of the {n_steps} steps "
+                    f"{output_name} targets ({fs} fs at {dt} fs/step), so there is nothing "
+                    f"left to run.")
     else:
         if resuming:
             logger.info(f"Continuing dynamics from step {steps_done}, "
                         f"{remaining_steps} steps to go...")
         else:
-            logger.info("Running dynamics trajectory...")
+            logger.info(f"Running dynamics trajectory ({n_steps} steps, {fs} fs at "
+                       f"{dt} fs/step)...")
         dynamics.run(steps=remaining_steps)
 
     # the observers only fire on their interval, so a run that ends between two of them has
     # not had its final state written - this is that write
     if save_md_checkpoints or resuming:
-        write_md_checkpoint(checkpoint_fp, dynamics, total_steps=fs,
+        write_md_checkpoint(checkpoint_fp, dynamics, total_steps=n_steps,
                             output_name=output_name, model_name=model_name,
                             rng_seed=rng_seed)
     if csv_fpath is not None and step_times is not None:
@@ -537,9 +553,12 @@ def save_md_run_csv(csv_fpath: str,
         total_run_time_s,12.400
 
     Note that the simulated time is the steps benchmarked here at the time step they were
-    taken with, i.e. what the run really simulated - not the ``fs / PS`` figure its trajectory
-    name carries, since ASE runs ``fs`` steps rather than ``fs / dt`` of them: the run above
-    takes 1000 steps at a 0.5 fs time step, which simulates 0.5 ps, while its name says 1.0 ps.
+    taken with, i.e. what this stretch of run really simulated (``get_trajectory_with_ase``
+    takes ``int(fs / dt)`` steps, so a *complete* run's figure here matches the ``fs / PS``
+    its trajectory name carries exactly - the run above takes 2000 steps at a 0.5 fs time
+    step, which simulates 1.0 ps, matching a name of ``..._1.0ps_...``). The two only differ
+    for a stretch that does not reach the full target, i.e. one that was resumed or killed
+    partway through - see the next paragraph.
 
     The rows describe the stretch of run this CSV covers, so the steps of a run picked up from
     a checkpoint are the steps of that stretch only. The CSVs of a run that was killed and
@@ -570,8 +589,9 @@ def save_md_run_csv(csv_fpath: str,
 
         writer.writerow(['mean_step_time_s', f"{mean_step_time:.6f}"])
         writer.writerow(['total_steps', total_steps])
-        # the steps above at the time step they were taken with, i.e. what the run really
-        # simulated (steps * dt / PS), not the fs / PS figure the trajectory name carries
+        # the steps above at the time step they were taken with, i.e. what this stretch really
+        # simulated (steps * dt / PS) - matches the fs / PS figure the trajectory name carries
+        # for a complete run, since get_trajectory_with_ase takes int(fs / dt) steps
         writer.writerow(['total_simulation_time_ps', f"{total_steps * md_config.dt / PS:.4f}"])
         writer.writerow(['total_run_time_s', f"{run_time_s:.3f}"])
 
@@ -751,8 +771,8 @@ def run_md_eval(init_configs: list,
             end_time = time()
             md_time = end_time - start_time
             # the steps the run took: the benchmarked ones where the CSV is on, otherwise the
-            # run's target, which a resume completes
-            steps_taken = len(step_times) if step_times else md_config.fs
+            # run's target (fs / dt steps), which a resume completes
+            steps_taken = len(step_times) if step_times else int(md_config.fs / md_config.dt)
             logger.info(f"Ran MD trajectory '{traj_name}' in {md_time:.4f}s, with an average step time of {float(md_time) / steps_taken}...")
 
             trajectories.append(trajectory)

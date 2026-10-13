@@ -25,8 +25,10 @@ from react_ml_test_public.helpers import dynamics as rmlt_dynamics
 from react_ml_test_public.helpers.io import compute_device_label
 from react_ml_test_public.helpers.settings import PS, MDSettings
 
-# a short run: 5 steps of 0.5 fs
+# a short run: 5 fs of simulated time at a 0.5 fs time step, i.e. 10 steps (fs is a time, not
+# a step count - get_trajectory_with_ase takes int(fs / dt) steps)
 MD_CONFIG = MDSettings(fs=5, temp=300, dt=0.5, interval=1, md_method="ase")
+N_STEPS = int(MD_CONFIG.fs / MD_CONFIG.dt)
 
 
 def _md_config(fs=MD_CONFIG.fs, dt=MD_CONFIG.dt):
@@ -211,8 +213,9 @@ class TestStepTimesAreRecorded:
                                               cuda_device="cpu",
                                               step_times=step_times)
 
-        # 5 steps, so 5 times - the observer's pre-first-step call is not one of them
-        assert len(step_times) == MD_CONFIG.fs
+        # 10 steps (5 fs at a 0.5 fs time step), so 10 times - the observer's pre-first-step
+        # call is not one of them
+        assert len(step_times) == N_STEPS
         assert all(step_time > 0 for step_time in step_times)
 
     def test_a_reused_trajectory_records_nothing(self, tmp_path, emt_md):
@@ -273,11 +276,12 @@ class TestRunMdEvalWritesCsv:
         summary = _summary(csv_fpath)
         assert summary["device"] == "CPU"
         assert summary["calculator"] == "ASE"
-        assert summary["total_steps"] == str(MD_CONFIG.fs)
-        # the steps the run took (5) at the time step it took them with (0.5 fs), i.e. one
-        # time step's worth per step - 0.0030 here would mean a step was counted twice
-        assert summary["total_simulation_time_ps"] == f"{MD_CONFIG.fs * MD_CONFIG.dt / PS:.4f}"
-        assert summary["total_simulation_time_ps"] == "0.0025"
+        assert summary["total_steps"] == str(N_STEPS)
+        # the steps the run took (10) at the time step it took them with (0.5 fs) comes to
+        # exactly the fs the run targeted (5), now that get_trajectory_with_ase takes
+        # int(fs / dt) steps - 0.0030 here would mean a step was counted twice
+        assert summary["total_simulation_time_ps"] == f"{MD_CONFIG.fs / PS:.4f}"
+        assert summary["total_simulation_time_ps"] == "0.0050"
 
     def test_a_skipped_run_writes_no_csv(self, tmp_path, emt_md):
         """A trajectory that already exists is reused, so there is nothing to benchmark."""
@@ -376,7 +380,7 @@ class TestEachStretchKeepsItsOwnCsv:
 
         steps = [int(_summary(fpath)["total_steps"]) for fpath in self._csv_fpaths(tmp_path)]
         assert all(step > 0 for step in steps)
-        assert sum(steps) == MD_CONFIG.fs
+        assert sum(steps) == N_STEPS
 
     def test_the_original_csv_is_left_as_it_was(self, tmp_path, monkeypatch, emt_md):
         """A resumed stretch does not touch the CSV of the stretch before it."""
@@ -400,6 +404,6 @@ class TestEachStretchKeepsItsOwnCsv:
 
         csv_fpaths = self._csv_fpaths(tmp_path)
         assert [f.name for f in csv_fpaths] == [f"{self.TRAJ_NAME}.csv"]
-        # some of the run, but not all of it: the steps before the kill, not the five it aimed at
+        # some of the run, but not all of it: the steps before the kill, not the ten it aimed at
         measured = int(_summary(csv_fpaths[0])["total_steps"])
-        assert 0 < measured < MD_CONFIG.fs
+        assert 0 < measured < N_STEPS

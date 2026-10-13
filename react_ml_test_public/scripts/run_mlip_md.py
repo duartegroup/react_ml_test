@@ -71,8 +71,9 @@ if __name__ == "__main__":
                               # <out_dir>/md_checkpoints, every checkpoint_every ps
                               # (default false).
         load_md_checkpoint:   # true: carry every run on from its own checkpoint, each
-                              # taking the steps it has left of fs; or the path of one
-                              # checkpoint, to carry a single run on from it (default false).
+                              # taking the steps it has left to reach fs fs of simulated
+                              # time; or the path of one checkpoint, to carry a single run
+                              # on from it (default false).
         checkpoint_every:     # ps of simulated time between checkpoint writes (default 10).
         cuda_device:          # GPU device for the MLIP calculators (default "cuda:0",
                               # falls back to "cpu" if that device is not found).

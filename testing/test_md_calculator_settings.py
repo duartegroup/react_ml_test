@@ -32,7 +32,7 @@ PACKAGE_ROOT = REPO_ROOT / "react_ml_test_public"
 HELPER_NAME = "get_trajectory_with_ase"
 FORWARDED_SETTINGS = ("enable_cueq", "model_dir")
 
-# a short run: 5 steps of 0.5 fs
+# a short run: 5 fs at a 0.5 fs time step, i.e. 10 steps
 MD_CONFIG = MDSettings(fs=5, temp=300, dt=0.5, interval=1, md_method="ase")
 
 

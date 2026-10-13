@@ -401,8 +401,13 @@ POSSIBLE_FORCE_LABELS = ['forces', 'QM_forces']
 class MDSettings(NamedTuple):
     """
     Settings struct for an md run.
+
+    ``fs`` is the run's total *simulated time*, in femtoseconds - not a step count. The
+    number of integration steps a run actually takes is derived from it as ``int(fs / dt)``
+    (see ``helpers.dynamics.get_trajectory_with_ase``), so a run always simulates ``fs``
+    regardless of what time step ``dt`` it takes it in.
     """
-    fs: int
+    fs: float
     temp: int
     dt: float
     interval: int

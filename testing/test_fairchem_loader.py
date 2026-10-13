@@ -34,7 +34,7 @@ from react_ml_test_public.helpers.settings import MDSettings
 # a fairchem model name, straight out of the registry
 FAIRCHEM_MODEL = "uma-s-1p2p1"
 
-# a short run: 5 steps of 0.5 fs
+# a short run: 5 fs at a 0.5 fs time step, i.e. 10 steps
 MD_CONFIG = MDSettings(fs=5, temp=300, dt=0.5, interval=1, md_method="ase")
 
 

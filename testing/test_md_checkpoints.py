@@ -35,8 +35,11 @@ from react_ml_test_public.helpers.settings import (
     MDSettings,
 )
 
-# short runs, so the tests stay quick: 5 steps at 0.5 fs, a frame and a timing per step
+# short runs, so the tests stay quick: 5 fs at a 0.5 fs time step (i.e. 10 steps - fs is a
+# time, not a step count: get_trajectory_with_ase takes int(fs / dt) steps), a frame and a
+# timing per step
 MD_CONFIG = MDSettings(fs=5, temp=300, dt=0.5, interval=1, md_method="ase")
+N_STEPS = int(MD_CONFIG.fs / MD_CONFIG.dt)
 
 CHECKPOINT_NAME = "md_checkpoint_test_checkpoint.yaml"
 
@@ -135,8 +138,8 @@ class TestCheckpointFile:
         checkpoint = yaml.safe_load((tmp_path / CHECKPOINT_NAME).read_text())
 
         # the run is over, so the checkpoint is its final state
-        assert checkpoint["step"] == MD_CONFIG.fs
-        assert checkpoint["total_steps"] == MD_CONFIG.fs
+        assert checkpoint["step"] == N_STEPS
+        assert checkpoint["total_steps"] == N_STEPS
         assert checkpoint["timestep_fs"] == pytest.approx(MD_CONFIG.dt)
         assert checkpoint["temperature_K"] == pytest.approx(MD_CONFIG.temp)
         assert checkpoint["friction"] == pytest.approx(rmlt_dynamics.MD_FRICTION)
@@ -215,14 +218,15 @@ class TestResumingARun:
 
     @staticmethod
     def _checkpointed_run(tmp_path, fs=MD_CONFIG.fs):
-        """A checkpointed run of ``fs`` steps, and the checkpoint file it left."""
+        """A checkpointed run targeting ``fs`` fs of simulated time (``N_STEPS`` steps by
+        default), and the checkpoint file it left."""
         trajectory = _run(tmp_path, fs=fs, save_md_checkpoints=True)
         return trajectory, str(tmp_path / CHECKPOINT_NAME)
 
     def test_it_continues_the_trajectory_the_checkpoint_came_from(self, tmp_path, emt_md):
         part, checkpoint_fp = self._checkpointed_run(tmp_path)
 
-        # the same run, asked to go further
+        # the same run, asked to go further (fs=8 at this 0.5 fs time step is 16 steps)
         resumed = _run(tmp_path, fs=8, load_md_checkpoint=checkpoint_fp)
 
         # the frames up to the checkpoint are still there, and the new ones follow them
@@ -231,19 +235,20 @@ class TestResumingARun:
             assert np.array_equal(earlier.get_positions(), later.get_positions())
 
         # and the checkpoint now records the state the run reached, not the one it was given
-        assert yaml.safe_load(open(checkpoint_fp))["step"] == 8
+        assert yaml.safe_load(open(checkpoint_fp))["step"] == 16
 
     def test_the_target_counts_the_whole_run(self, tmp_path, emt_md):
-        """fs is the run's total, so a resume from step 5 of 8 takes 3 steps, not 8."""
+        """fs is the run's total simulated time, so a resume from step 10 of a 16-step target
+        (fs=8 at this 0.5 fs time step) takes 6 steps, not 16."""
         self._checkpointed_run(tmp_path)
         checkpoint_fp = str(tmp_path / CHECKPOINT_NAME)
 
         step_times = []
         resumed = _run(tmp_path, fs=8, load_md_checkpoint=checkpoint_fp, step_times=step_times)
 
-        assert len(step_times) == 3
-        # a 5-step run writes frames 0-5, and the resume continues them to frame 8
-        assert len(resumed) == MD_CONFIG.fs + 1 + 3
+        assert len(step_times) == 6
+        # a 10-step run writes frames 0-10, and the resume continues them to frame 16
+        assert len(resumed) == N_STEPS + 1 + 6
 
     def test_a_resume_reproduces_an_uninterrupted_run(self, tmp_path, emt_md, fixed_seed):
         """The strongest check that there is no state outside the checkpoint.
@@ -301,7 +306,7 @@ class TestResumingARun:
         _, checkpoint_fp = self._checkpointed_run(tmp_path)
         _run(tmp_path, fs=8, load_md_checkpoint=checkpoint_fp)
 
-        assert yaml.safe_load(open(checkpoint_fp))["step"] == 8
+        assert yaml.safe_load(open(checkpoint_fp))["step"] == 16
 
     def test_a_missing_checkpoint_is_not_a_fresh_start(self, tmp_path, emt_md):
         with pytest.raises(FileNotFoundError, match="checkpoint"):
@@ -315,8 +320,8 @@ class TestResumingARun:
 
         resumed = _run(tmp_path, fs=8, load_md_checkpoint=checkpoint_fp)
 
-        # the frame resumed from, plus the 3 steps to the new target
-        assert len(resumed) == 1 + 3
+        # the frame resumed from, plus the 6 steps to the new (16-step) target
+        assert len(resumed) == 1 + 6
 
     def test_the_csv_counts_a_resumed_run_at_the_checkpoints_time_step(self, tmp_path, emt_md):
         """The CSV's simulated time is steps * dt, with the dt the steps were taken with.
@@ -324,18 +329,20 @@ class TestResumingARun:
         A resume integrates at the checkpoint's time step rather than the input's (see
         get_trajectory_with_ase), so the benchmark of that stretch has to be timed at it too.
         """
-        self._checkpointed_run(tmp_path)                             # 5 steps at dt 0.5
+        self._checkpointed_run(tmp_path)                             # 10 steps at dt 0.5
         checkpoint_fp = str(tmp_path / CHECKPOINT_NAME)
 
         csv_fpath = tmp_path / "resumed.csv"
         step_times = []
+        # fs=8 at the checkpoint's own dt (0.5, which wins over this dt=1.0) is 16 steps, so
+        # this resume takes 16 - 10 = 6 more
         _run(tmp_path, fs=8, dt=1.0, load_md_checkpoint=checkpoint_fp,
              step_times=step_times, csv_fpath=str(csv_fpath), csv_device="CPU")
 
         summary = _csv_summary(csv_fpath)
-        assert summary["total_steps"] == str(len(step_times)) == "3"
-        # 3 steps of the checkpoint's 0.5 fs, not of the 1.0 fs the input asks for
-        assert summary["total_simulation_time_ps"] == f"{3 * MD_CONFIG.dt / PS:.4f}"
+        assert summary["total_steps"] == str(len(step_times)) == "6"
+        # 6 steps of the checkpoint's 0.5 fs, not of the 1.0 fs the input asks for
+        assert summary["total_simulation_time_ps"] == f"{6 * MD_CONFIG.dt / PS:.4f}"
 
     def test_a_stretch_with_no_steps_to_take_writes_no_csv(self, tmp_path, emt_md):
         """There is nothing to benchmark, so no empty CSV is left behind."""
@@ -385,7 +392,7 @@ class TestTheScriptsRuns:
         self._run_md_eval(tmp_path, save_md_checkpoints=True)
 
         assert self._checkpoint_fp(tmp_path).is_file()
-        assert yaml.safe_load(self._checkpoint_fp(tmp_path).read_text())["step"] == MD_CONFIG.fs
+        assert yaml.safe_load(self._checkpoint_fp(tmp_path).read_text())["step"] == N_STEPS
 
     def test_a_resume_is_not_skipped_for_having_a_trajectory(self, tmp_path, emt_md):
         """A resume continues a trajectory that is already there, so it must not be reused."""
@@ -407,7 +414,7 @@ class TestTheScriptsRuns:
 
         self._run_md_eval(tmp_path, load_md_checkpoint=True, save_md_checkpoints=True)
 
-        # the frame resumed from and nothing else: a fresh start would have run all 5 steps
+        # the frame resumed from and nothing else: a fresh start would have run all 10 steps
         assert len(read(str(self._trajectory_fp(tmp_path)), index=":")) == 1
 
     def test_a_resume_with_no_checkpoint_yet_starts_the_run(self, tmp_path, emt_md):
