@@ -134,7 +134,7 @@ To run this for the other systems, use `inputs/irc/anthracene_DA_IRC_barrier.yam
 
 Image: Fine-tuned MACE-OFF TS optimisation in water of hetero Diels-Alder reaction to form guajadial.
 
-<img src="img/eg_3a.png" width="45%"> <img src="" width="45%">
+<img src="img/eg_3a.png" width="45%">
 
 #### 1. TS Optimisation
 
