@@ -1,11 +1,17 @@
 """Script to cut a solvation shell out of a reactant in a solvent box."""
-from react_ml_test_public.helpers.settings import ANTHRACENE_DA_DATA_DIR, CPD_MVK_DA_DATA_DIR, OPT_DIR, I_Cl_SN2_DATA_DIR, \
-    GUAJADIAL_DA_DATA_DIR, SOLVENTS_DIR
 import ase
-from react_ml_test_public.helpers.io import get_name_from_path, flexible_ase_read
-from react_ml_test_public.helpers.solvation import get_solv_shell
-from react_ml_test_public.helpers.logging import logger
 
+from react_ml_test_public.helpers.io import flexible_ase_read, get_name_from_path
+from react_ml_test_public.helpers.logging import logger
+from react_ml_test_public.helpers.settings import (
+    ANTHRACENE_DA_DATA_DIR,
+    CPD_MVK_DA_DATA_DIR,
+    GUAJADIAL_DA_DATA_DIR,
+    OPT_DIR,
+    SOLVENTS_DIR,
+    I_Cl_SN2_DATA_DIR,
+)
+from react_ml_test_public.helpers.solvation import get_solv_shell
 
 if __name__ == '__main__':
 

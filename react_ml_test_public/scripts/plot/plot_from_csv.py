@@ -2,39 +2,26 @@
 Script to plot a correlation plot from two random input csv headers.
 """
 
-import pandas as pd
-import matplotlib.pyplot as plt
 import sys
+
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
-from react_ml_test_public.helpers.plot import correlation_scatter_plot, line_plot, bar_plot
-from react_ml_test_public.helpers.settings import CSV_DIR, PLOT_DIR, GUAJADIAL_DA_DATA_DIR, PlotSettings, PAPER_MODEL_COLOURS, OUT_DIR
 from react_ml_test_public.helpers.io import get_name_from_path
-
-
-def plot_pairwise_correlation(csv_fname: str, 
-                              x_column_header: str, 
-                              y_column_header: str,
-                              save_fp: str):
-    import seaborn as sns
-
-    # Load the data from the CSV file
-    df = pd.read_csv(csv_fname)
-    
-    # Check if the specified columns exist in the dataframe
-    if x_column_header not in df.columns or y_column_header not in df.columns:
-        print(f"Error: Columns '{x_column_header}' and/or '{y_column_header}' not found in the CSV file.")
-        return
-    
-    # Create a new DataFrame with the x and y values
-    data = df[[x_column_header, y_column_header]]
-    
-    # Create a pairwise correlation plot using seaborn's pairplot
-    sns.pairplot(data)
-    
-    # Add titles and labels
-    plt.title(f"Pairwise Correlation Plot: {x_column_header} vs {y_column_header}")
-    plt.savefig(save_fp, format='png')
+from react_ml_test_public.helpers.plot import (
+    bar_plot,
+    correlation_scatter_plot,
+    line_plot,
+)
+from react_ml_test_public.helpers.settings import (
+    CSV_DIR,
+    GUAJADIAL_DA_DATA_DIR,
+    OUT_DIR,
+    PAPER_MODEL_COLOURS,
+    PLOT_DIR,
+    PlotSettings,
+)
 
 
 def plot_category_scatter_with_error_bars(csv_fpath: str, 

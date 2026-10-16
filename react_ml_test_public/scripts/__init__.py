@@ -3,4 +3,4 @@
 #     rmlt run-test-set-comparison
 # (`rmlt list` shows all scripts; dashes and underscores are interchangeable.)
 # The same module can also be run directly with:
-#     python -m react_ml_test_public.scripts.run_test_set_comparison
+#     python -m react_ml_test_public.scripts.eval.run_test_set_comparison

@@ -332,7 +332,7 @@ if __name__ == "__main__":
 
         rmlt run-pretrain-bias-analysis inputs/pretrain_bias/CPD_MVK_DA_pretrain_bias.yaml
 
-    (or equivalently: python -m react_ml_test_public.scripts.run_pretrain_bias_analysis
+    (or equivalently: python -m react_ml_test_public.scripts.bias.run_pretrain_bias_analysis
     inputs/pretrain_bias/CPD_MVK_DA_pretrain_bias.yaml)
 
     Input YAML format (see inputs/pretrain_bias/CPD_MVK_DA_pretrain_bias.yaml for a full

@@ -2,12 +2,14 @@
 Script to update metadata with ase for an .xyz file. 
 WARNING THIS WILL OVERRIDE FILES IN THE SPECIFIED DIRECTORY!!!
 """
-import os
 import glob
+import os
+
 from ase.io import read, write
-from react_ml_test_public.helpers.settings import OPT_DIR, CPD_MVK_DA_DATA_DIR
-from react_ml_test_public.helpers.logging import logger
+
 from react_ml_test_public.helpers.io import flexible_ase_read
+from react_ml_test_public.helpers.logging import logger
+from react_ml_test_public.helpers.settings import CPD_MVK_DA_DATA_DIR, OPT_DIR
 
 box_dim = None
 constraint = None

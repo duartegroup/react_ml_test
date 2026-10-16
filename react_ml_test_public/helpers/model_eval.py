@@ -2,7 +2,6 @@
 Helpers for eval of models.
 """
 import csv
-import glob
 import os
 from typing import Callable, Literal, Tuple, List
 import numpy as np
@@ -12,7 +11,7 @@ from react_ml_test_public.helpers.settings import CSV_DIR, EV, EV_PER_AMSTRONG, 
 from react_ml_test_public.helpers.stats import calculate_rmse_on_errors
 from react_ml_test_public.helpers.utils import convert_units, get_ase_props
 from react_ml_test_public.helpers.utils import calc_energy_shifts, guess_per_element_mean_energies
-from react_ml_test_public.helpers.utils import get_formatted_model_name, natural_sort_key
+from react_ml_test_public.helpers.utils import get_formatted_model_name
 from react_ml_test_public.helpers.logging import logger
 
 
@@ -258,81 +257,90 @@ def get_test_and_pred_data(model_names: List[str],
     return all_test_energies, all_test_forces, all_pred_energies_dict, all_pred_forces_dict
 
 
+def _infer_base_model_grouping(model_names: List[str]) -> Tuple[int, int]:
+    """Infer (num_base_models, num_base_model_comps) from a list of model names.
+
+    A name counts as a base model when no other name in the list is a prefix of it (e.g.
+    'GO-MACE-23'); every other name is a comparison of whichever base name is the longest
+    matching prefix of it (e.g. a fine-tuned 'GO-MACE-23_<train_name>_<n>_config_fine_tuned'
+    name). ``num_base_model_comps`` requires every base model to have the same number of
+    comparisons, since alpha_list / linestyle_list apply the same way to each.
+
+    :param model_names: model names to group, e.g. as listed in the input YAML
+    :return: (number of unique base models, number of comparisons per base model)
+    """
+    base_model_names = [name for name in model_names
+                        if not any(other != name and name.startswith(other) for other in model_names)]
+
+    comp_counts = {
+        base: sum(1 for name in model_names if name == base or name.startswith(base))
+        for base in base_model_names
+    }
+    assert len(set(comp_counts.values())) == 1, (
+        f"model_names groups by base model have differing numbers of comparisons: {comp_counts} "
+        "- alpha_list / linestyle_list need the same number of comparisons for every base model."
+    )
+
+    return len(base_model_names), comp_counts[base_model_names[0]]
+
+
 def reaction_barrier_comparison(model_names: List[str],
                                 test_trj_fpath: str,
-                                run_names: List[str] = None,
+                                plot_settings: PlotSettings,
+                                plot: bool = True,
                                 save_name: str = None,
-                                run_type: str = None,
-                                from_scratch_name: str = None,
-                                num_base_models: int = 1,
-                                num_base_model_comps: int = 1,
                                 alpha_list: List[float] = None,
                                 linestyle_list: List[str] = None,
                                 include_forces: bool = False,
                                 ref_prod_index: int = -1,
                                 custom_xyz_parser: Callable = None,
-                                xlabel: str = "Index",
                                 energy_units: str = KCAL_PER_MOL,
                                 force_units: str = "meV / A",
-                                energies_ylim: Tuple[float, float] = None,
-                                forces_ylim: Tuple[float, float] = None,
-                                grid_lines: bool = False,
-                                show_legend: bool = False,
-                                cust_legend_colours: List[str] = None,
-                                cust_legend_labels: List[str] = None,
-                                cust_legend_linestyles: List[str] = None,
                                 ref_point_labels: List[str] = None,
                                 cuda_device: str = "cuda:0",
-                                plot_dir: str = None,
-                                csv_dir: str = None,
+                                plot_dir: str = PLOT_DIR,
+                                csv_dir: str = CSV_DIR,
                                 model_dir: str = None,
                                 fair_chem_task: str = None,
                                 fair_chem_setting: str = None):
     """
-    Compare a selection of MLIP models along an IRC trajectory, and write the resulting
-    energy-error / reaction-profile / force-error plots and per-model CSV to disk.
+    Compare a selection of MLIP models along an IRC trajectory, write the resulting
+    energy-error / reaction-profile / force-error plots and per-model CSV to disk, and return
+    each model's key error values (see ``:return:`` below) for a caller to aggregate further
+    (e.g. ``run_multi_react_barrier``, across several trajectories).
 
-    For each name in ``run_names`` the models are either taken from ``model_names`` as listed
-    (the unnamed ``['']`` run) or discovered in ``model_dir`` by glob, as selected by
-    ``run_type``. Everything is saved under ``plot_dir/irc`` and ``csv_dir``, named after the
-    trajectory and the run's ``save_name``; both default to ``PLOT_DIR`` / ``CSV_DIR``.
+    Everything is saved under ``plot_dir/irc`` and ``csv_dir``, named after the trajectory and
+    ``save_name``; both ``plot_dir`` / ``csv_dir`` default to ``PLOT_DIR`` / ``CSV_DIR``.
 
     ``cuda_device`` is expected to be already resolved (see ``resolve_cuda_device``), as the
     calculators fall back to 'cpu' internally anyway.
 
-    :param model_names: list of model names to compare, in plotting order
+    :param model_names: list of model names to compare, in plotting order. The number of base
+                        models and the number of comparisons per base model (i.e. how many times
+                        alpha_list / linestyle_list are repeated) are inferred from this list
+                        (see ``_infer_base_model_grouping``), rather than given explicitly.
     :param test_trj_fpath: path to the IRC trajectory (an .xyz / .extxyz file) to compare against
-    :param run_names: run names to process; defaults to [''], i.e. a single unnamed run using
-                      model_names as listed. A named run is instead discovered by glob and needs
-                      run_type to be set.
-    :param save_name: output name, used in the saved plot / CSV file names. Overwritten per named
-                      run as '{base_model}_{run_name}_fine_tuned' / '{from_scratch_name}_from_scratch_{run_name}'.
-    :param run_type: 'fine_tuned' / 'from_scratch', i.e. how a named run's models are discovered.
-                     None disables discovery.
-    :param from_scratch_name: base model name used in from-scratch model names, for
-                              run_type == 'from_scratch'
-    :param num_base_models: number of base models, i.e. how many times alpha_list / linestyle_list
-                            are repeated
-    :param num_base_model_comps: number of comparisons per base model. Retained for the
-                                 input-YAML contract, but no longer used for the plot colours,
-                                 which are looked up per model name instead (get_model_colour)
-    :param alpha_list: alpha values used for plotting, repeated num_base_models times.
+    :param plot_settings: plot appearance settings, used (and specialised per plot) for the
+                          energy-error / reaction-profile / force-error plots. Supplies
+                          x_label (x-axis label for the reaction-profile plot, e.g. "IRC Image"),
+                          energies_ylim / forces_ylim (y-limits for the reaction-profile / force
+                          -error plots), grid_lines, show_legend, and the cust_legend_* fields
+                          (legend colours / labels / line styles for the reference (DFT) line)
+    :param plot: whether to produce the per-reaction energy-error / reaction-profile /
+                force-error plots (the CSV is always written, and the returned error values
+                are always computed, regardless of this flag). Set to False by
+                ``run_multi_react_barrier`` to skip these, since it draws its own aggregate
+                violin plots instead.
+    :param save_name: output name, used in the saved plot / CSV file names.
+    :param alpha_list: alpha values used for plotting, repeated once per base model.
                        Defaults to [1.0]
-    :param linestyle_list: line style per base-model comparison, repeated num_base_models times.
+    :param linestyle_list: line style per base-model comparison, repeated once per base model.
                            Defaults to ["-"]
     :param include_forces: whether to also compare force norms
     :param ref_prod_index: index of the product reference config (e.g. -1)
     :param custom_xyz_parser: custom parser for reading the trajectory's energy / force labels
-    :param xlabel: x-axis label for the reaction-profile plot (e.g. "IRC Image")
     :param energy_units: energy unit for the plots / CSV
     :param force_units: force unit for the force-error plot
-    :param energies_ylim: [lo, hi] y-limits for the reaction-profile plot (or None)
-    :param forces_ylim: [lo, hi] y-limits for the force-error plot (or None)
-    :param grid_lines: whether to draw grid lines
-    :param show_legend: whether to show the legend
-    :param cust_legend_colours: legend colours for the reference (DFT) line
-    :param cust_legend_labels: legend labels for the reference (DFT) line
-    :param cust_legend_linestyles: legend line styles for the reference (DFT) line
     :param ref_point_labels: labels for the RS / TS / PS reference points (or None)
     :param cuda_device: device for the MLIP calculators
     :param plot_dir: directory to write the plots to (default PLOT_DIR)
@@ -342,103 +350,102 @@ def reaction_barrier_comparison(model_names: List[str],
                            for molecules. Optional, ignored by the other model loaders.
     :param fair_chem_setting: FairChem only - the fairchem inference settings, e.g. 'turbo'.
                               Optional, ignored by the other model loaders.
-    :return: None. The plots are written to plot_dir/irc and the CSV to csv_dir.
+    :return: a dict mapping each name in ``model_names`` to its key error values, for a caller
+            (e.g. ``run_multi_react_barrier``) that aggregates these over several trajectories:
+              - "energy_errors": per-config absolute energy errors (np.ndarray)
+              - "force_errors": per-config mean absolute force-norm errors (np.ndarray), or
+                None when ``include_forces`` is False
+              - "barrier_energy_error": predicted - reference barrier (peak) energy (float)
+            The plots are written to plot_dir/irc and the CSV to csv_dir regardless.
     """
 
     # defaults duplicated from the input-YAML resolver, so the helper also works standalone
-    run_names = run_names if run_names else ['']
     alpha_list = alpha_list if alpha_list is not None else [1.0]
     linestyle_list = linestyle_list if linestyle_list is not None else ["-"]
-    plot_dir = PLOT_DIR if plot_dir is None else plot_dir
-    csv_dir = CSV_DIR if csv_dir is None else csv_dir
-    os.makedirs(f"{plot_dir}/irc", exist_ok=True)
+    if plot:
+        os.makedirs(f"{plot_dir}/irc", exist_ok=True)
     os.makedirs(csv_dir, exist_ok=True)
 
-    # a YAML input that sets model_dir discovers its fine-tuned / from-scratch runs there
+    # unpacked from plot_settings, and specialised per plot further down
+    xlabel = plot_settings.x_label
+    energies_ylim = plot_settings.energies_ylim
+    forces_ylim = plot_settings.forces_ylim
+    grid_lines = plot_settings.grid_lines
+    show_legend = plot_settings.show_legend
+    cust_legend_colours = plot_settings.cust_legend_colours
+    cust_legend_labels = plot_settings.cust_legend_labels
+    cust_legend_linestyles = plot_settings.cust_legend_linestyles
+
     model_dir = resolve_model_dir(model_dir)
 
-    for run_name in run_names:
+    print("Testing models: ", model_names)
 
-        if run_name != '':
-            if run_type == 'fine_tuned':
-                base_model_name = model_names[0]
-                save_name = f"{base_model_name}_{run_name}_fine_tuned"
-                model_name_stub = f"{model_names[0]}_{run_name}_*_config_fine_tuned*"
-                model_fpaths = sorted(glob.glob(os.path.join(model_dir, model_name_stub)), key=natural_sort_key)
-                assert len(model_fpaths) > 0, f"No files detected in directory {model_dir} with name stub {model_name_stub}..."
-                model_names = [base_model_name] + [get_name_from_path(model_fpath) for model_fpath in model_fpaths]
+    # ===== derived plot lists =====
+    num_base_models, num_base_model_comps = _infer_base_model_grouping(model_names)
+    custom_linestyle_list = linestyle_list * num_base_models
+    custom_alpha_list = alpha_list * num_base_models
+    custom_zorder_list = [len(model_names) + 2 - i for i in range(len(model_names))]
 
-            elif run_type == 'from_scratch':
-                save_name = f"{from_scratch_name}_from_scratch_{run_name}"
-                model_name_stub = f"{from_scratch_name}_from_scratch_{run_name}_*_config*"
-                model_fpaths = sorted(glob.glob(os.path.join(model_dir, model_name_stub)), key=natural_sort_key)
-                assert len(model_fpaths) > 0, f"No files detected in directory {model_dir} with name stub {model_name_stub}..."
-                model_names = [get_name_from_path(model_fpath) for model_fpath in model_fpaths]
+    # colour each model by name, so fine-tuned / from-scratch runs inherit the colour of
+    # the base model whose name is a stub of theirs
+    colours = [get_model_colour(x) for x in model_names]
 
-        print("Testing models: ", model_names)
+    # run comparison
+    # get test set ground truth  and forces
+    test_set_name = get_name_from_path(test_trj_fpath)
 
-        # ===== derived plot lists =====
-        custom_linestyle_list = linestyle_list * num_base_models
-        custom_alpha_list = alpha_list * num_base_models
-        custom_zorder_list = [len(model_names) + 2 - i for i in range(len(model_names))]
+    all_test_energies, all_test_forces, all_pred_energies_dict, all_pred_forces_dict = get_test_and_pred_data(model_names,
+                                                                                                            [test_trj_fpath],
+                                                                                                            include_forces=include_forces,
+                                                                                                            apply_energy_offsets=True,  # True
+                                                                                                            custom_xyz_parsers=[custom_xyz_parser],
+                                                                                                            energy_units=energy_units,
+                                                                                                            force_units=force_units,
+                                                                                                            cuda_device=cuda_device,
+                                                                                                            model_dir=model_dir,
+                                                                                                            fair_chem_task=fair_chem_task,
+                                                                                                            fair_chem_setting=fair_chem_setting)
 
-        # colour each model by name, so fine-tuned / from-scratch runs inherit the colour of
-        # the base model whose name is a stub of theirs
-        colours = [get_model_colour(x) for x in model_names]
+    combined_datasets = all_test_energies
+    combined_datasets.extend([pred_energies
+                            for model_pred_energies in all_pred_energies_dict.values()
+                            for pred_energies in model_pred_energies])
+    formatted_model_names = [get_formatted_model_name(model_name) for model_name in model_names]
+    dataset_names = ["Reference"] + formatted_model_names
+    logger.info(f"Dataset Names: {dataset_names}")
 
-        # run comparison
-        # get test set ground truth  and forces
-        test_set_name = get_name_from_path(test_trj_fpath)
+    energy_errors = [np.abs(combined_datasets[0] - pred_energies) for pred_energies in combined_datasets[1:]]
 
-        all_test_energies, all_test_forces, all_pred_energies_dict, all_pred_forces_dict = get_test_and_pred_data(model_names,
-                                                                                                                [test_trj_fpath],
-                                                                                                                include_forces=include_forces,
-                                                                                                                apply_energy_offsets=True,  # True
-                                                                                                                custom_xyz_parsers=[custom_xyz_parser],
-                                                                                                                energy_units=energy_units,
-                                                                                                                force_units=force_units,
-                                                                                                                cuda_device=cuda_device,
-                                                                                                                model_dir=model_dir,
-                                                                                                                fair_chem_task=fair_chem_task,
-                                                                                                                fair_chem_setting=fair_chem_setting)
+    for i, model_name in enumerate(formatted_model_names):
+        energy_rmse = calculate_rmse_on_errors(energy_errors[i])
+        logger.info(f'{model_name} Absolute Energy RMSE: {energy_rmse}')
 
-        combined_datasets = all_test_energies
-        combined_datasets.extend([pred_energies
-                                for model_pred_energies in all_pred_energies_dict.values()
-                                for pred_energies in model_pred_energies])
-        formatted_model_names = [get_formatted_model_name(model_name) for model_name in model_names]
-        dataset_names = ["Reference"] + formatted_model_names
-        logger.info(f"Dataset Names: {dataset_names}")
-
-        energy_errors = [np.abs(combined_datasets[0] - pred_energies) for pred_energies in combined_datasets[1:]]
-
-        for i, model_name in enumerate(formatted_model_names):
-            energy_rmse = calculate_rmse_on_errors(energy_errors[i])
-            logger.info(f'{model_name} Absolute Energy RMSE: {energy_rmse}')
-
-        # plot index plot of absolute energy errors
-        plot_settings = PlotSettings(x_label='Index', y_label=f"Energy RMSE ({energy_units})", custom_colour_list=colours,
-                                    show_legend=show_legend,
-                                    custom_alpha_list=custom_alpha_list,
-                                    custom_linestyle_list=custom_linestyle_list)
+    # plot index plot of absolute energy errors (energy_plot_settings is also the basis for
+    # the force-error plot settings further down, so it is built regardless of `plot`)
+    energy_plot_settings = PlotSettings(x_label='Index', y_label=f"Energy RMSE ({energy_units})", custom_colour_list=colours,
+                                show_legend=show_legend,
+                                custom_alpha_list=custom_alpha_list,
+                                custom_linestyle_list=custom_linestyle_list)
+    if plot:
         save_fp = f"{plot_dir}/irc/{test_set_name}_{save_name}_energy_errors.png"
         index_plot(energy_errors,                   formatted_model_names,
                    save_fp,
                    plot_as_lines=[i for i in range(len(formatted_model_names))],  # or, only 0
-                   plot_settings=plot_settings
+                   plot_settings=energy_plot_settings
                   )
         logger.info(f"Saved energy error index plot to {save_fp}...")
 
-        # set all energies relative to reference config
-        for dataset in combined_datasets:
-            dataset -= dataset[0]  # all reference reactant state
+    # set all energies relative to reference config
+    for dataset in combined_datasets:
+        dataset -= dataset[0]  # all reference reactant state
 
-        # get key reference values
-        ref_peak_energy = np.max(combined_datasets[0])
-        ref_peak_pos = np.argmax(combined_datasets[0])
-        ref_prod_energy = combined_datasets[0][ref_prod_index]
+    # get key reference values
+    ref_peak_energy = np.max(combined_datasets[0])
+    ref_peak_pos = np.argmax(combined_datasets[0])
+    ref_prod_energy = combined_datasets[0][ref_prod_index]
 
-        # produce plot of step vs. energy
+    # produce plot of step vs. energy
+    if plot:
         save_fp = f"{plot_dir}/irc/{test_set_name}_{save_name}_reaction_plot.png"
         step_plot_settings = PlotSettings(x_label=xlabel,
                                     y_label=f"Potential Energy ({energy_units})",
@@ -468,64 +475,74 @@ def reaction_barrier_comparison(model_names: List[str],
                 )
         logger.info(f"Saved reaction plot to {save_fp}...")
 
-        # if forces are included
-        model_force_norm_errors = []
-        if include_forces:
-            configs = flexible_ase_read(test_trj_fpath, custom_xyz_parser)
-            test_force_norms = np.linalg.norm(all_test_forces[0], axis=1)
-            for model_name in model_names:
-                pred_force_norms = np.linalg.norm(all_pred_forces_dict[model_name][0], axis=1)
-                force_norm_errors = np.abs(test_force_norms - pred_force_norms)
+    # if forces are included
+    model_force_norm_errors = []
+    if include_forces:
+        configs = flexible_ase_read(test_trj_fpath, custom_xyz_parser)
+        test_force_norms = np.linalg.norm(all_test_forces[0], axis=1)
+        for model_name in model_names:
+            pred_force_norms = np.linalg.norm(all_pred_forces_dict[model_name][0], axis=1)
+            force_norm_errors = np.abs(test_force_norms - pred_force_norms)
 
-                # average over configs
-                config_ave_force_norm_errors = []
-                start = 0
-                for config in configs:
-                    config_force_errors = np.array(force_norm_errors[start: start + len(config)])
-                    config_mean_force_error = np.mean(config_force_errors)
-                    config_ave_force_norm_errors.append(config_mean_force_error)
-                    start += len(config)
-                model_force_norm_errors.append(np.array(config_ave_force_norm_errors))
+            # average over configs
+            config_ave_force_norm_errors = []
+            start = 0
+            for config in configs:
+                config_force_errors = np.array(force_norm_errors[start: start + len(config)])
+                config_mean_force_error = np.mean(config_force_errors)
+                config_ave_force_norm_errors.append(config_mean_force_error)
+                start += len(config)
+            model_force_norm_errors.append(np.array(config_ave_force_norm_errors))
 
-            # index plot of force errors
+        # index plot of force errors
+        if plot:
             save_fp = f"{plot_dir}/irc/{test_set_name}_{save_name}_force_errors.png"
-            plot_settings = plot_settings._replace(y_label=f"|DFT - Pred Force Norm| ({force_units})",
+            force_plot_settings = energy_plot_settings._replace(y_label=f"|DFT - Pred Force Norm| ({force_units})",
                                                 custom_linestyle_list=custom_linestyle_list, ylim=forces_ylim)
             index_plot(model_force_norm_errors,
                     formatted_model_names,
                     save_fp,
                     plot_as_lines=[i for i in range(len(model_force_norm_errors))],  # or, only 0
-                    plot_settings=plot_settings
+                    plot_settings=force_plot_settings
                     )
             logger.info(f"Saved force error index plot to {save_fp}...")
 
-        csv_tuples = []
-        for i, model_name in enumerate(model_names):
-            pred_energies = all_pred_energies_dict[model_name][0]
-            reactant_energy = pred_energies[0]
-            peak_energy = np.max(pred_energies)
-            peak_pos = np.argmax(pred_energies)
+    csv_tuples = []
+    model_error_values = {}
+    for i, model_name in enumerate(model_names):
+        pred_energies = all_pred_energies_dict[model_name][0]
+        reactant_energy = pred_energies[0]
+        peak_energy = np.max(pred_energies)
+        peak_pos = np.argmax(pred_energies)
 
-            ref_peak_energy_error = peak_energy - ref_peak_energy
-            ref_peak_force_error = model_force_norm_errors[i][peak_pos] if include_forces else 'N/A'
-            ref_peak_pos_error = peak_pos - ref_peak_pos
-            product_energy = pred_energies[ref_prod_index]
-            csv_tuples.append((model_name, float(reactant_energy), float(product_energy), float(peak_energy), int(peak_pos), 
-                               float(ref_prod_energy), float(ref_peak_energy), int(ref_peak_pos), float(ref_peak_energy_error), 
-                               float(ref_peak_force_error) if include_forces else 'N/A', 
-                               int(ref_peak_pos_error)))
+        ref_peak_energy_error = peak_energy - ref_peak_energy
+        ref_peak_force_error = model_force_norm_errors[i][peak_pos] if include_forces else 'N/A'
+        ref_peak_pos_error = peak_pos - ref_peak_pos
+        product_energy = pred_energies[ref_prod_index]
+        csv_tuples.append((model_name, float(reactant_energy), float(product_energy), float(peak_energy), int(peak_pos),
+                           float(ref_prod_energy), float(ref_peak_energy), int(ref_peak_pos), float(ref_peak_energy_error),
+                           float(ref_peak_force_error) if include_forces else 'N/A',
+                           int(ref_peak_pos_error)))
 
-        # save csv
-        csv_save_fp = f"{csv_dir}/{test_set_name}_{save_name}.csv"
-        with open(csv_save_fp, mode='w', newline='') as csv_file:
-            writer = csv.writer(csv_file)
-            header_row = ['Model', f'Reactant Energy {energy_units}', f'Product Energy {energy_units}', f'Peak Energy {energy_units}', 'Peak Position (Step)',
-                            f'Ref Prod Energy {energy_units}', f'Ref Peak Energy {energy_units}', 'Ref Peak Position',
-                            f'Ref Peak Energy Error {energy_units}', f'Ref Peak Force Error {force_units}', 'Ref Peak Position Error (Step)']
-            writer.writerow(header_row)
-            print(header_row)
-            writer.writerows(csv_tuples)
-            for csv_tuple in csv_tuples:
-                print(csv_tuple)
+        model_error_values[model_name] = {
+            "energy_errors": energy_errors[i],
+            "force_errors": model_force_norm_errors[i] if include_forces else None,
+            "barrier_energy_error": float(ref_peak_energy_error),
+        }
 
-        logger.info(f"Saved csv to: {csv_save_fp}...")
+    # save csv
+    csv_save_fp = f"{csv_dir}/{test_set_name}_{save_name}.csv"
+    with open(csv_save_fp, mode='w', newline='') as csv_file:
+        writer = csv.writer(csv_file)
+        header_row = ['Model', f'Reactant Energy {energy_units}', f'Product Energy {energy_units}', f'Peak Energy {energy_units}', 'Peak Position (Step)',
+                        f'Ref Prod Energy {energy_units}', f'Ref Peak Energy {energy_units}', 'Ref Peak Position',
+                        f'Ref Peak Energy Error {energy_units}', f'Ref Peak Force Error {force_units}', 'Ref Peak Position Error (Step)']
+        writer.writerow(header_row)
+        print(header_row)
+        writer.writerows(csv_tuples)
+        for csv_tuple in csv_tuples:
+            print(csv_tuple)
+
+    logger.info(f"Saved csv to: {csv_save_fp}...")
+
+    return model_error_values

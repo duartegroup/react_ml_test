@@ -119,8 +119,6 @@ out_dir: "{tmp_path}/out"
 model_names:
   - MACE-OFF23_medium
 save_name: test_profile
-num_base_models: 1
-num_base_model_comps: 1
 test_trj_fpath: "cluster/profile.xyz"
 custom_xyz_parser: "hartree_props_parser"
 """)
@@ -139,8 +137,6 @@ custom_xyz_parser: "hartree_props_parser"
 model_names:
   - MACE-OFF23_medium
 save_name: test_profile
-num_base_models: 1
-num_base_model_comps: 1
 test_trj_fpath: "{tmp_path}/profile.xyz"
 """)
         resolved = rmlt_inputs.resolve_reaction_barrier_comparison_yaml(yaml_fpath)
@@ -155,8 +151,6 @@ test_trj_fpath: "{tmp_path}/profile.xyz"
 model_names:
   - MACE-OFF23_medium
 save_name: test_profile
-num_base_models: 1
-num_base_model_comps: 1
 test_trj_fpath: "{tmp_path}/profile.xyz"
 custom_xyz_parser: "not_a_parser"
 """)

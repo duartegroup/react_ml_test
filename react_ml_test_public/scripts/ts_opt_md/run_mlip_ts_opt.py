@@ -42,7 +42,7 @@ if __name__ == "__main__":
 
         rmlt run-mlip-ts-opt inputs/ts/CPD_MVK_DA_ts_opt_vac.yaml
 
-    (or equivalently: python -m react_ml_test_public.scripts.run_mlip_ts_opt
+    (or equivalently: python -m react_ml_test_public.scripts.ts_opt_md.run_mlip_ts_opt
     inputs/ts/CPD_MVK_DA_ts_opt_vac.yaml)
 
     Input YAML format (see inputs/ts/CPD_MVK_DA_ts_opt_vac.yaml for a full example):

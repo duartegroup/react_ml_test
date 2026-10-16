@@ -30,7 +30,7 @@ from react_ml_test_public.helpers.settings import (
     MACETrainSettings,
 )
 from react_ml_test_public.helpers.train_utils import train_test_split
-from react_ml_test_public.scripts.run_test_set_comparison import (
+from react_ml_test_public.scripts.eval.run_test_set_comparison import (
     run_model_comparison_on_test_set,
 )
 

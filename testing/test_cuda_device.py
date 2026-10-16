@@ -338,15 +338,23 @@ class TestYamlCudaDevice:
             assert "cuda_device" not in rmlt_inputs.resolve_trajectory_analysis_yaml(str(fpath))
 
 
-# pre-existing import failures in this repository (unrelated to device handling)
+# pre-existing import failures in this repository (unrelated to device handling), keyed by
+# module path relative to react_ml_test_public.scripts (dotted, e.g. "data.download_datasets")
 KNOWN_BROKEN_IMPORTS = {
-    "download_datasets": "optional 'load_atoms' package is not installed",
-    "run_mace_mhft": "react_ml_test_public.helpers.training_justine is missing from this repo",
-    "save_orca_out_to_xyz": "this mlptrain version has no mlptrain.utils.orca_output_to_npz",
+    "data.download_datasets": "optional 'load_atoms' package is not installed",
+    "train.run_mace_mhft": "react_ml_test_public.helpers.training_justine is missing from this repo",
+    "dft.save_orca_out_to_xyz": "this mlptrain version has no mlptrain.utils.orca_output_to_npz",
 }
 
 _scripts_pkg = importlib.import_module("react_ml_test_public.scripts")
-SCRIPT_MODULES = sorted(module.name for module in pkgutil.iter_modules(_scripts_pkg.__path__))
+_PREFIX_LEN = len(_scripts_pkg.__name__) + 1
+# scripts are grouped into category subpackages, so this must walk recursively rather
+# than just listing the top-level modules (pkgutil.iter_modules would miss them all)
+SCRIPT_MODULES = sorted(
+    module.name[_PREFIX_LEN:]
+    for module in pkgutil.walk_packages(_scripts_pkg.__path__, prefix=_scripts_pkg.__name__ + ".")
+    if not module.ispkg
+)
 
 
 class TestScriptModulesImport:

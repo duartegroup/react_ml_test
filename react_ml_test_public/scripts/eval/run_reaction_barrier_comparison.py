@@ -6,6 +6,7 @@ from react_ml_test_public.helpers import inputs as rmlt_inputs
 from react_ml_test_public.helpers.io import resolve_cuda_device
 from react_ml_test_public.helpers.logging import logger
 from react_ml_test_public.helpers.model_eval import reaction_barrier_comparison
+from react_ml_test_public.helpers.settings import PlotSettings
 
 if __name__ == "__main__":
 
@@ -15,7 +16,7 @@ if __name__ == "__main__":
 
         rmlt run-reaction-barrier-comparison inputs/irc/<test_name>.yaml
 
-    (or equivalently: python -m react_ml_test_public.scripts.run_reaction_barrier_comparison
+    (or equivalently: python -m react_ml_test_public.scripts.eval.run_reaction_barrier_comparison
     inputs/irc/<test_name>.yaml)
 
     Input YAML format (see inputs/IRC/guajadial_DA_IRC_barrier.yaml for a full example):
@@ -25,9 +26,8 @@ if __name__ == "__main__":
                                 # (default DATA_DIR from settings.py).
         out_dir:                # output root directory, i.e. plots go to <out_dir>/plt and
                                 # CSVs to <out_dir>/csv (default OUT_DIR from settings.py).
-        model_dir:              # directory the listed models (and, for a named run_type, the
-                                # fine-tuned / from-scratch glob) are resolved in, when they
-                                # live outside the default MODEL_DIR (default MODEL_DIR).
+        model_dir:              # directory the listed models are resolved in, when they live
+                                # outside the default MODEL_DIR (default MODEL_DIR).
         n:                      # training set size.
         train_name:             # fine-tuning training set name.
         sample_str:             # sampling-strategy suffix used in fine-tuned names (e.g. "ts_gauss_").
@@ -36,15 +36,12 @@ if __name__ == "__main__":
         omol_rep_num:           # OMOL model repetition number.
         omol_energy_str:        # OMOL energy suffix/prefix string.
         model_names:            # list of model names to compare (supports ${var} templating).
+                                # The number of base models and the number of comparisons per
+                                # base model are inferred from this list: a name counts as a
+                                # base model when no other name in the list is a prefix of it,
+                                # and every other name is a comparison of whichever base name is
+                                # the longest matching prefix of it (e.g. a fine-tuned name).
         save_name:              # output name.
-        run_names:              # multiple run names to detect and process (defaults to [''],
-                                # i.e. a single unnamed run using model_names as listed).
-        run_type:               # "fine_tuned" / "from_scratch": how a named run's models
-                                # are discovered by glob (defaults to None = no discovery).
-        from_scratch_name:      # base model name used in from-scratch model names
-                                # (only needed when run_type is "from_scratch").
-        num_base_models:        # number of base models.
-        num_base_model_comps:   # number of comparisons per base model.
         alpha_list:             # alpha values used for plotting.
         linestyle_list:         # line style per base-model comparison.
 
@@ -75,7 +72,7 @@ if __name__ == "__main__":
         cuda_device:            # GPU device for the MLIP calculators (default "cuda:0",
                                 # falls back to "cpu" if that device is not found).
 
-    Any omitted field is set to None, except run_names, which defaults to [''].
+    Any omitted field is set to None.
     """
 
 
@@ -99,11 +96,6 @@ if __name__ == "__main__":
     model_dir = resolved["model_dir"]
     model_names = resolved["model_names"]
     save_name = resolved["save_name"]
-    run_names = resolved["run_names"]
-    run_type = resolved["run_type"]
-    from_scratch_name = resolved["from_scratch_name"]
-    num_base_models = resolved["num_base_models"]
-    num_base_model_comps = resolved["num_base_model_comps"]
     alpha_list = resolved["alpha_list"]
     linestyle_list = resolved["linestyle_list"]
 
@@ -119,9 +111,7 @@ if __name__ == "__main__":
     custom_xyz_parser = resolved["custom_xyz_parser"]
     include_forces = resolved["include_forces"]
     ref_prod_index = resolved["ref_prod_index"]
-    xlabel = resolved["xlabel"]
     force_units = resolved["force_units"]
-    grid_lines = resolved["grid_lines"]
     show_legend = resolved["show_legend"]
     cust_legend_colours = resolved["cust_legend_colours"]
     cust_legend_labels = resolved["cust_legend_labels"]
@@ -140,31 +130,29 @@ if __name__ == "__main__":
     if cuda_device != "cpu":
         torch.set_default_dtype(torch.float32)
 
+    # plot appearance settings for the energy-error / reaction-profile / force-error plots
+    plot_settings = PlotSettings(x_label='IRC Image',
+                                energies_ylim=energies_ylim,
+                                forces_ylim=forces_ylim,
+                                grid_lines=False,
+                                show_legend=show_legend,
+                                cust_legend_colours=cust_legend_colours,
+                                cust_legend_labels=cust_legend_labels,
+                                cust_legend_linestyles=cust_legend_linestyles)
+
     # run the comparison (see helpers/model_eval.py): writes the energy-error /
     # reaction-profile / force-error plots and the per-model CSV
     reaction_barrier_comparison(model_names,
                                 test_trj_fpath,
-                                run_names=run_names,
+                                plot_settings,
                                 save_name=save_name,
-                                run_type=run_type,
-                                from_scratch_name=from_scratch_name,
-                                num_base_models=num_base_models,
-                                num_base_model_comps=num_base_model_comps,
                                 alpha_list=alpha_list,
                                 linestyle_list=linestyle_list,
                                 include_forces=include_forces,
                                 ref_prod_index=ref_prod_index,
                                 custom_xyz_parser=custom_xyz_parser,
-                                xlabel=xlabel,
                                 energy_units=energy_units,
                                 force_units=force_units,
-                                energies_ylim=energies_ylim,
-                                forces_ylim=forces_ylim,
-                                grid_lines=grid_lines,
-                                show_legend=show_legend,
-                                cust_legend_colours=cust_legend_colours,
-                                cust_legend_labels=cust_legend_labels,
-                                cust_legend_linestyles=cust_legend_linestyles,
                                 ref_point_labels=ref_point_labels,
                                 cuda_device=cuda_device,
                                 plot_dir=plot_dir,

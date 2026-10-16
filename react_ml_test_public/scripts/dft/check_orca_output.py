@@ -16,7 +16,7 @@ if __name__ == "__main__":
 
         rmlt check-orca-output inputs/dft/check_orca_output_guajadial_eg.yaml
 
-    (or equivalently: python -m react_ml_test_public.scripts.check_orca_output
+    (or equivalently: python -m react_ml_test_public.scripts.dft.check_orca_output
     inputs/dft/check_orca_output_guajadial_eg.yaml)
 
     Input YAML format (see inputs/dft/check_orca_output_guajadial_eg.yaml for an example):

@@ -144,7 +144,7 @@ input_name: "my_set"
 """)
 
         result = subprocess.run([sys.executable, "-m",
-                                 "react_ml_test_public.scripts.check_orca_output", yaml_fpath],
+                                 "react_ml_test_public.scripts.dft.check_orca_output", yaml_fpath],
                                 cwd=REPO_ROOT, capture_output=True, text=True, timeout=300)
 
         assert result.returncode == 0, f"{result.stdout[-2000:]}\n{result.stderr[-2000:]}"
@@ -166,7 +166,7 @@ input_name: "my_set"
 """)
 
         result = subprocess.run([sys.executable, "-m",
-                                 "react_ml_test_public.scripts.check_orca_output", yaml_fpath],
+                                 "react_ml_test_public.scripts.dft.check_orca_output", yaml_fpath],
                                 cwd=REPO_ROOT, capture_output=True, text=True, timeout=300)
 
         assert result.returncode == 0, f"{result.stdout[-2000:]}\n{result.stderr[-2000:]}"
@@ -176,7 +176,7 @@ input_name: "my_set"
 
     def test_the_input_yaml_is_the_only_argument_it_needs(self):
         result = subprocess.run([sys.executable, "-m",
-                                 "react_ml_test_public.scripts.check_orca_output", "--help"],
+                                 "react_ml_test_public.scripts.dft.check_orca_output", "--help"],
                                 cwd=REPO_ROOT, capture_output=True, text=True, timeout=300)
 
         assert result.returncode == 0, result.stderr[-2000:]

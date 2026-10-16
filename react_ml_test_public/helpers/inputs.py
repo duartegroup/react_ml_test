@@ -153,15 +153,21 @@ def resolve_test_set_comparison_yaml(input_yaml_fpath: str, parser=None):
 
 
 def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None):
-    """Load + process the input YAML for run_reaction_barrier_comparison.py.
+    """Load + process the input YAML shared by run_reaction_barrier_comparison.py (single
+    trajectory) and run_multi_react_barrier.py (several trajectories).
 
-    Returns a flat dict of the config variables that script's ``__main__`` declares.
+    Returns a flat dict of the config variables those scripts' ``__main__`` declare.
 
     Data / output directories may be set per-YAML with the optional ``data_dir`` and ``out_dir``
     fields, which default to ``DATA_DIR`` / ``OUT_DIR`` from settings.py. A relative
     ``test_trj_fpath`` that does not resolve from the current working directory is taken to be
     relative to ``data_dir``, and plots / CSVs are written under ``out_dir`` (see
     ``resolve_out_dirs``).
+
+    Either ``test_trj_fpath`` (a single trajectory) or ``test_trj_fpaths`` (a list, for
+    run_multi_react_barrier.py) must be set; whichever is given, the other is filled in from it
+    (``test_trj_fpaths`` as a single-element list, or ``test_trj_fpath`` as its first element),
+    so both scripts can rely on both keys being present.
 
     ``test_trj_fpath`` (and every other string field) may reference another field of this YAML
     with a ``${var}`` reference, e.g. ``test/cluster/epoxide/wB97M-V/${save_name}.xyz``, which is
@@ -192,30 +198,31 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
     omol_energy_str = input_config.get("omol_energy_str", None)
     model_names = input_config.get("model_names", None)
     save_name = input_config.get("save_name", None)
-    num_base_models = input_config.get("num_base_models", None)
-    num_base_model_comps = input_config.get("num_base_model_comps", None)
     alpha_list = input_config.get("alpha_list", None)
     linestyle_list = input_config.get("linestyle_list", None)
     if not model_names:
         _error(parser, "model_names must be a non-empty list of model names in the input YAML.")
-    if num_base_models is None or num_base_model_comps is None:
-        _error(parser, "num_base_models and num_base_model_comps must be set in the input YAML.")
     alpha_list = alpha_list if alpha_list is not None else [1.0]
     linestyle_list = linestyle_list if linestyle_list is not None else ["-"]
-    # run_names defaults to [''] - a single unnamed run, in which case the models are
-    # taken from model_names as listed. A named run instead triggers the discovery of
-    # that run's models by glob, as selected by run_type.
-    run_names = input_config.get("run_names", None)
-    if not run_names:
-        run_names = ['']
-    run_type = input_config.get("run_type", None)
-    from_scratch_name = input_config.get("from_scratch_name", None)
 
     # ===== IRC trajectory comparison =====
-    test_trj_fpath = resolve_data_path(input_config.get("test_trj_fpath", None), data_dir)
-    if test_trj_fpath is None:
-        _error(parser, "test_trj_fpath must be set in the input YAML "
-                       "(path to the IRC trajectory .xyz to compare against).")
+    # test_trj_fpaths (plural, for run_multi_react_barrier.py) is a list of trajectories to
+    # compare the same model_names against; test_trj_fpath (singular, for
+    # run_reaction_barrier_comparison.py) is the single-trajectory equivalent. Either may be
+    # set; when only one is given, the other is filled in from it so both scripts' __main__
+    # can rely on both keys being present.
+    test_trj_fpaths_field = input_config.get("test_trj_fpaths", None)
+    test_trj_fpath_field = input_config.get("test_trj_fpath", None)
+    if test_trj_fpaths_field:
+        test_trj_fpaths = [resolve_data_path(fpath, data_dir) for fpath in test_trj_fpaths_field]
+        test_trj_fpath = test_trj_fpaths[0]
+    elif test_trj_fpath_field:
+        test_trj_fpath = resolve_data_path(test_trj_fpath_field, data_dir)
+        test_trj_fpaths = [test_trj_fpath]
+    else:
+        _error(parser, "test_trj_fpath or test_trj_fpaths must be set in the input YAML "
+                       "(path(s) to the IRC trajectory .xyz to compare against).")
+        test_trj_fpath, test_trj_fpaths = None, []
     custom_xyz_parser_name = input_config.get("custom_xyz_parser", None)
     include_forces = input_config.get("include_forces", False)
     ref_prod_index = input_config.get("ref_prod_index", -1)
@@ -275,11 +282,6 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
         "model_dir": model_dir,
         "model_names": model_names,
         "save_name": save_name,
-        "run_names": run_names,
-        "run_type": run_type,
-        "from_scratch_name": from_scratch_name,
-        "num_base_models": num_base_models,
-        "num_base_model_comps": num_base_model_comps,
         "alpha_list": alpha_list,
         "linestyle_list": linestyle_list,
         "data_dir": data_dir,
@@ -287,6 +289,7 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
         "plot_dir": plot_dir,
         "csv_dir": csv_dir,
         "test_trj_fpath": test_trj_fpath,
+        "test_trj_fpaths": test_trj_fpaths,
         "custom_xyz_parser": custom_xyz_parser,
         "include_forces": include_forces,
         "ref_prod_index": ref_prod_index,

@@ -20,7 +20,7 @@ if __name__ == "__main__":
 
         rmlt save-orca-out-to-xyz inputs/dft/save_orca_out_to_xyz_guajadial_eg.yaml
 
-    (or equivalently: python -m react_ml_test_public.scripts.save_orca_out_to_xyz
+    (or equivalently: python -m react_ml_test_public.scripts.dft.save_orca_out_to_xyz
     inputs/dft/save_orca_out_to_xyz_guajadial_eg.yaml)
 
     Input YAML format (see inputs/dft/save_orca_out_to_xyz_guajadial_eg.yaml for an example):

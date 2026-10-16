@@ -152,7 +152,7 @@ if __name__ == "__main__":
 
         rmlt save-dft-inputs-from-xyz inputs/dft/guajadial_DA_test.yaml
 
-    (or equivalently: python -m react_ml_test_public.scripts.save_dft_inputs_from_xyz
+    (or equivalently: python -m react_ml_test_public.scripts.dft.save_dft_inputs_from_xyz
     inputs/dft/guajadial_DA_test.yaml)
 
     Input YAML format (see inputs/dft/guajadial_DA_test.yaml for a full example):

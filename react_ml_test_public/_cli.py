@@ -30,6 +30,22 @@ import sys
 
 _SCRIPTS_PKG = "react_ml_test_public.scripts"
 
+# Display headings for the script categories, i.e. the immediate subdirectories of
+# `scripts/`, in the order `rmlt list` should show them. A category without an entry
+# here falls back to its folder name, title-cased (see `_heading`).
+_CATEGORY_HEADINGS = {
+    "data": "Data",
+    "dft": "DFT",
+    "train": "Training",
+    "bias": "Bias / pretraining analysis",
+    "ts_opt_md": "TS optimisation / MD",
+    "eval": "Evaluation",
+    "plot": "Plotting",
+    "solvation": "Solvation",
+    "models": "Models",
+    "clean": "Cleanup",
+}
+
 # The generic submission script `rmlt slurm` hands to sbatch. Its '#SBATCH' lines hold
 # the resources for the job, so it is meant to be edited by hand
 # (see slurm/slurm_script.sh).
@@ -48,20 +64,49 @@ def _scripts_dir() -> str:
     return os.path.dirname(importlib.import_module(_SCRIPTS_PKG).__file__)
 
 
-def _script_names() -> list[str]:
-    """Sorted module names of the runnable scripts (no __init__/private modules)."""
-    names = []
-    for entry in sorted(os.listdir(_scripts_dir())):
-        if entry.startswith("_") or not entry.endswith(".py"):
-            continue
-        names.append(entry[:-3])
-    return names
+def _is_script_file(entry: str) -> bool:
+    return entry.endswith(".py") and not entry.startswith("_")
 
 
-def _doc_summary(name: str) -> str:
+def _categories() -> list[str]:
+    """Sorted immediate subdirectories of scripts/ that group the workflow scripts."""
+    root = _scripts_dir()
+    return sorted(
+        entry for entry in os.listdir(root)
+        if not entry.startswith("_") and os.path.isdir(os.path.join(root, entry))
+    )
+
+
+def _names_in(category: str | None) -> list[str]:
+    """Sorted module basenames (no .py) directly inside `category` (scripts/ itself if None)."""
+    directory = _scripts_dir() if category is None else os.path.join(_scripts_dir(), category)
+    return sorted(entry[:-3] for entry in os.listdir(directory) if _is_script_file(entry))
+
+
+def _all_scripts() -> list[tuple[str | None, str]]:
+    """(category, name) for every runnable script - uncategorised ones first, then by category."""
+    scripts = [(None, name) for name in _names_in(None)]
+    for category in _categories():
+        scripts.extend((category, name) for name in _names_in(category))
+    return scripts
+
+
+def _module_path(category: str | None, name: str) -> str:
+    """The script's module path relative to `_SCRIPTS_PKG`, for import / runpy."""
+    return name if category is None else f"{category}.{name}"
+
+
+def _heading(category: str | None) -> str:
+    if category is None:
+        return "Uncategorised"
+    return _CATEGORY_HEADINGS.get(category, category.replace("_", " ").title())
+
+
+def _doc_summary(category: str | None, name: str) -> str:
     """First line of a script's module docstring, read without importing it."""
+    directory = _scripts_dir() if category is None else os.path.join(_scripts_dir(), category)
     try:
-        with open(os.path.join(_scripts_dir(), name + ".py"), encoding="utf-8") as fh:
+        with open(os.path.join(directory, name + ".py"), encoding="utf-8") as fh:
             tree = ast.parse(fh.read())
         doc = ast.get_docstring(tree)
     except (OSError, SyntaxError, ValueError):
@@ -74,12 +119,19 @@ def _token(name: str) -> str:
 
 
 def _module_name(token: str) -> str | None:
-    """Map a command token (dashes or underscores) back to a module name."""
+    """Map a command token (dashes or underscores) back to a script's module path.
+
+    Scripts are looked up by name alone (not by category + name), so this relies on
+    names being unique across categories.
+    """
     token = token.strip()
     if token.endswith(".py"):
         token = token[:-3]
     key = token.replace("-", "_")
-    return key if key in _script_names() else None
+    for category, name in _all_scripts():
+        if name == key:
+            return _module_path(category, name)
+    return None
 
 
 def _print_list(stream=None) -> None:
@@ -90,14 +142,26 @@ def _print_list(stream=None) -> None:
     print("Usage: rmlt <script> [args...]", file=stream)
     print("       rmlt slurm [sbatch options] <script> <input.yaml>   # submit to SLURM", file=stream)
     print("       rmlt list", file=stream)
-    print(file=stream)
-    print("Available scripts:", file=stream)
-    names = _script_names()
-    tokens = [_token(name) for name in names]
+
+    scripts = _all_scripts()
+    tokens = [_token(name) for _, name in scripts]
     width = max(len(token) for token in tokens) if tokens else 0
-    for name, token in zip(names, tokens):
-        summary = _doc_summary(name)
-        print(f"  {token:<{width}}  {summary}" if summary else f"  {token}", file=stream)
+
+    categories: list[str | None] = []
+    grouped: dict[str | None, list[str]] = {}
+    for category, name in scripts:
+        if category not in grouped:
+            categories.append(category)
+            grouped[category] = []
+        grouped[category].append(name)
+
+    for category in categories:
+        print(file=stream)
+        print(f"{_heading(category)}:", file=stream)
+        for name in grouped[category]:
+            token = _token(name)
+            summary = _doc_summary(category, name)
+            print(f"  {token:<{width}}  {summary}" if summary else f"  {token}", file=stream)
 
 
 def _print_slurm_help(stream=None) -> None:

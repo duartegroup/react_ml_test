@@ -23,14 +23,9 @@ model_names:
 
 save_name: paper_ft_models_n=46
 
-# run_names defaults to [''] - a single unnamed run, using model_names as listed above.
-# For named runs, list them here and set run_type so that each run's models are
-# discovered by glob, e.g. with run_type: fine_tuned or run_type: from_scratch:
-# run_names:
-#   - ${save_name}
-
-num_base_models: 4
-num_base_model_comps: 1
+# num_base_models / num_base_model_comps are inferred from model_names (see
+# reaction_barrier_comparison): a name counts as a base model when no other name in the
+# list is a prefix of it, so these 4 fine-tuned-only names are each their own base model.
 alpha_list: [0.9]
 linestyle_list: ["-"]
 

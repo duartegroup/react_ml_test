@@ -438,7 +438,7 @@ if __name__ == "__main__":
 
         rmlt run-test-set-comparison inputs/eg1.yaml
 
-    (or equivalently: python -m react_ml_test_public.scripts.run_test_set_comparison
+    (or equivalently: python -m react_ml_test_public.scripts.eval.run_test_set_comparison
     inputs/eg1.yaml)
 
     Input YAML format (see inputs/test/CPD_MVK_DA_FT42_test.yaml for a full example):

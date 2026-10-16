@@ -7,7 +7,6 @@ from load_atoms import load_dataset
 
 from react_ml_test_public.helpers.settings import DATASETS_DIR
 
-
 if __name__ == "__main__":
 
     # ds = load_dataset('ANI-1x')

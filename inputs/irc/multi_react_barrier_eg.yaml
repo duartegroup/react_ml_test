@@ -1,0 +1,41 @@
+# run_multi_react_barrier.py input YAML - zero-shot foundation-model comparison across
+# several IRC trajectories at once.
+# Compares the listed (non-fine-tuned) foundation models' reaction profiles and barrier
+# heights against DFT along each trajectory in test_trj_fpaths, then reports each model's
+# RMSEs aggregated over all of them (plus the per-trajectory outputs run_reaction_barrier
+# _comparison.py itself would write).
+
+# Run with:
+#   rmlt run-multi-react-barrier inputs/irc/multi_react_barrier_eg.yaml
+
+# Paths are relative to the repository root.
+
+model_names:
+  - GO-MACE-23
+  - MACE-OFF23_medium
+  - MACE-MP-0b3_medium
+  - MACE-omol-0-extra-large-1024
+
+# num_base_models / num_base_model_comps are inferred from model_names: none of these
+# names is a prefix of another, so each is its own base model (4 base models, 1
+# comparison each).
+alpha_list: [0.9]
+linestyle_list: ["-"]
+
+save_name: zero_shot_foundation_models
+
+# ---- IRC trajectory comparison ----
+test_trj_fpaths:
+  - data/reaction_data/CPD_MVK_DA/test/CPD_MVK_wB97M_IRC.xyz
+  - data/reaction_data/anthracene_DA/test/anthracene_DA_wB97M_IRC.xyz
+  - data/reaction_data/guajadial_DA/test/guajadial_wB97M_IRC.xyz
+custom_xyz_parser: "orca_props_parser"   # "orca_props_parser" / "autode_props_parser" / empty for default parsing
+include_forces: false
+energy_units: "kcal / mol"                # or "meV" / "meV / atom" / "kJ / mol"
+force_units: "meV / A"                    # only used when include_forces: true
+show_legend: false
+
+# ---- run settings ----
+# device for the MLIP calculators; "cpu" can be set here, and a device that cannot be
+# found on this machine also falls back to "cpu"
+cuda_device: "cuda:0"

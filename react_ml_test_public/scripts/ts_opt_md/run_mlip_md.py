@@ -22,7 +22,7 @@ if __name__ == "__main__":
 
         rmlt run-mlip-md inputs/md/CPD_MVK_DA_dynamics_vac.yaml
 
-    (or equivalently: python -m react_ml_test_public.scripts.run_mlip_md
+    (or equivalently: python -m react_ml_test_public.scripts.ts_opt_md.run_mlip_md
     inputs/md/CPD_MVK_DA_dynamics_vac.yaml)
 
     Input YAML format (see inputs/md/CPD_MVK_DA_dynamics_vac.yaml for a full example):

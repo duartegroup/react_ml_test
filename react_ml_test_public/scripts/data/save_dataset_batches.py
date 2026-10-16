@@ -16,7 +16,7 @@ if __name__ == "__main__":
 
         rmlt save-dataset-batches inputs/datasets/save_dataset_batches_go_mace_eg.yaml
 
-    (or equivalently: python -m react_ml_test_public.scripts.save_dataset_batches
+    (or equivalently: python -m react_ml_test_public.scripts.data.save_dataset_batches
     inputs/datasets/save_dataset_batches_go_mace_eg.yaml)
 
     Input YAML format (see inputs/datasets/save_dataset_batches_go_mace_eg.yaml for an example):

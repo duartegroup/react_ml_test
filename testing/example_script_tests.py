@@ -33,6 +33,7 @@ from pathlib import Path
 
 import pytest
 
+from react_ml_test_public._cli import _module_name as _script_module_name
 from react_ml_test_public.helpers import inputs as rmlt_inputs
 from react_ml_test_public.helpers.io import get_name_from_path
 from react_ml_test_public.helpers.settings import CSV_DIR, OPT_DIR, PLOT_DIR, PS, TRAJ_DIR
@@ -132,7 +133,8 @@ def _run(script: str, yaml_rel: str, timeout: int = ANALYSIS_TIMEOUT) -> subproc
     if rmlt is not None:
         command = [rmlt, script.replace("_", "-"), yaml_rel]
     else:
-        command = [sys.executable, "-m", f"react_ml_test_public.scripts.{script}", yaml_rel]
+        module = _script_module_name(script)
+        command = [sys.executable, "-m", f"react_ml_test_public.scripts.{module}", yaml_rel]
 
     result = subprocess.run(command, cwd=REPO_ROOT, capture_output=True, text=True, timeout=timeout)
     assert result.returncode == 0, (f"{' '.join(command)} exited with {result.returncode}:\n"
@@ -245,7 +247,8 @@ class TestExampleScripts:
     @pytest.mark.parametrize("script", EXAMPLE_SCRIPTS)
     def test_scripts_take_the_input_yaml_as_an_argument(self, script):
         """README: scripts also run as `python -m react_ml_test_public.scripts.<script>`."""
-        result = subprocess.run([sys.executable, "-m", f"react_ml_test_public.scripts.{script}", "--help"],
+        module = _script_module_name(script)
+        result = subprocess.run([sys.executable, "-m", f"react_ml_test_public.scripts.{module}", "--help"],
                                 cwd=REPO_ROOT, capture_output=True, text=True, timeout=600)
         assert result.returncode == 0, result.stderr[-2000:]
         assert "usage" in result.stdout.lower()

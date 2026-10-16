@@ -68,7 +68,7 @@ rmlt list
 Scripts can also be run as ordinary modules, if you prefer:
 
 ```
-python -m react_ml_test_public.scripts.run_test_set_comparison
+python -m react_ml_test_public.scripts.eval.run_test_set_comparison
 ```
 
 ### Submitting to a SLURM cluster
