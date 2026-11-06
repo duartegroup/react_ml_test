@@ -1,4 +1,4 @@
-# react_ml_test_public
+# react_ml_test
 
 Tools and scripts for training / evaluating machine-learned interatomic potentials (MLIPs) for chemical reactions in vacuum and solution, as part of the pre-print: "Data-efficient fine-tuning for reaction modelling in explicit solvent" (Holownia, J.; Juraskova, V.; Deringer, V. L., Duarte, F., 2026): https://chemrxiv.org/doi/abs/10.26434/chemrxiv.15007217/v1.
 
@@ -175,42 +175,6 @@ Run: `rmlt run-pretrain-bias-analysis inputs/pretrain_bias/CPD_MVK_DA_pretrain_b
 This will produce plots in `out/plt/descriptors` of the overall correlation scores, linear coefficients, and predicted error magnitudes across all models for each breakdown of the data.
 
 This can be run for the other two systems using the provided yaml inputs: `inputs/pretrain_bias/anthracene_DA_pretrain_bias.yaml` and ``inputs/pretrain_bias/guajadial_DA_pretrain_bias.yaml`.
-
-## Key Workflows
-
-### 1. Dataset preparation (existing labelled xyz files)
-
-#### 1. `rmlt save-npz-as-xyz`
-
-#### 2. `rmlt add-xyz-metadata`
-
-    - DESCRIPTION: Adds some xyz metadata to an .xyz file (= i.e. config type labels / box dimensions).
-    - USAGE: Add relevant parameters in the python script and then run.
-
-#### 3. `rmlt filter-datasets`
-
-    - DESCRIPTION: Script to filter and / or combine .xyz file datasets.
-    - USAGE: Add relevant parameters in the python script and then run, use this as in the other examples to first do force filtering, then filter by config type to create subsets.
-
-#### 4. `rmlt save-train-test-split`
-
-    - DESCRIPTION: Script to perform a train / valid / test split of an input dataset (or group of datasets) and save these as separate files.
-    - USAGE: Combine all dataset subset sources (i.e. AL vac / solv + additional vacuum / solv configs) and split them into for e.g. a 70:10:20 train/valid/test split.
-             Then use script in 3. to create train / valid / test vacuum / solvated subsets.
-
-#### 5. `rmlt run-ds-analysis`
-
-    - DESCRIPTION: analyse the spread of your dataset about a reaction coordinate, with SOAP descriptors, energy / force distributions etc.
-    - USAGE: Run `rmlt run-ds-analysis inputs/dataset/guajadial_DA_train_subsets.yaml`, which analyses the datasets the YAML lists (their train / valid / test subsets here) against each other and writes the plots to `out/plt/ds_analysis/`. YAML inputs for the other two systems are in `inputs/dataset/`; set `filter_config_type: vacuum` (or `solvated`) in one to analyse only that half of the datasets, and `calc_soap: true` to add the SOAP-descriptor PCA plots (off by default, as it needs `dscribe` and takes a while for a whole dataset).
-
-#### 6. `rmlt save-dft-inputs-from-xyz`
-
-    - DESCRIPTION: Generate DFT (ORCA / VASP) single-point input files from an .xyz file of configurations (one input per config).
-    - USAGE: Run `rmlt save-dft-inputs-from-xyz inputs/dft/guajadial_DA_test.yaml`, which writes the ORCA inputs to the `out_dir` the YAML sets (one subdirectory per config). YAML inputs for the other systems (and for VASP) are in `inputs/dft/`.
-
-### 2. Analysis
-
-- `rmlt run-test-set-comparison`. Runs the main energy / force comparisons of a selection of specified models. Precalculated results will be loaded from cached npz files.
 
 ## Package layout
 
