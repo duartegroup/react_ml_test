@@ -16,6 +16,7 @@ from mlptrain.configurations.calculate import _method_and_keywords
 from react_ml_test_public.helpers import inputs as rmlt_inputs
 from react_ml_test_public.helpers.io import (
     format_orca_basis_block,
+    format_orca_irc_block,
     get_name_from_path,
     insert_orca_input_block,
 )
@@ -31,7 +32,8 @@ def save_orca_inputs_from_xyz(input_fp: str,
                               mult: int,
                               out_dir: str,
                               extra_name_tag: str = None,
-                              basis: list = None):
+                              basis: list = None,
+                              irc: list = None):
     """
     Generate an ORCA input file for each config in an extxyz file.
 
@@ -43,6 +45,8 @@ def save_orca_inputs_from_xyz(input_fp: str,
         extra_name_tag (str): Optional tag appended to the input name
         basis (list): Optional list of (key, value) pairs written into each input as an
                       ORCA %basis block, e.g. [("AuxJ", "aug-cc-pVTZ/JK")]
+        irc (list): Optional list of (key, value) pairs written into each input as an
+                    ORCA %irc block, e.g. [("Hess_Filename", "guajadial_TS.hess")]
     """
 
     input_name = get_name_from_path(input_fp)
@@ -62,6 +66,7 @@ def save_orca_inputs_from_xyz(input_fp: str,
     config_set.load_xyz(input_fp, charge, mult)
 
     basis_block = format_orca_basis_block(basis) if basis is not None else None
+    irc_block = format_orca_irc_block(irc) if irc is not None else None
 
     for i, config in enumerate(config_set):
         calc = Calculation(
@@ -84,6 +89,8 @@ def save_orca_inputs_from_xyz(input_fp: str,
         # basis the YAML sets is inserted into the file autode has just generated
         if basis_block is not None:
             insert_orca_input_block(calc._executor.input.filename, basis_block)
+        if irc_block is not None:
+            insert_orca_input_block(calc._executor.input.filename, irc_block)
 
 
 def save_vasp_inputs_from_xyz(input_fp: str,
@@ -175,12 +182,22 @@ if __name__ == "__main__":
                               # (method: orca; defaults to Config's own value).
         orca_keywords:        # ORCA keywords, applied to mlptrain's Config as a list of
                               # strings, e.g. ["WB97M-D3BJ", "def2-TZVPPD"] (method: orca).
+        calc_type:            # "sp" / "opt" / "irc" (method: orca; default "sp"). Appends
+                              # the matching literal job-type keyword ("Opt" / "IRC") onto
+                              # orca_keywords, which must then be set explicitly. "irc"
+                              # additionally requires the irc field below.
         basis:                # ORCA block input, written into each .inp as a %basis block
                               # (method: orca; optional). This is for the basis settings the
                               # ! keyword line cannot express, i.e. the auxiliary basis
                               # slots, e.g. basis: AuxJ "aug-cc-pVTZ/JK" - a block key and
                               # its value, a mapping of keys to values, or a list of either
                               # (a bare basis set name sets the orbital "Basis").
+        irc:                  # ORCA %irc block input, written into each .inp as a %irc
+                              # block (method: orca; required when calc_type: "irc"). A
+                              # mapping of block keys to values, e.g.
+                              # {Hess_Filename: "guajadial_TS_opt_wB97M.hess", MaxIter: 250}
+                              # - Hess_Filename is required (the .hess file IRC reads the
+                              # initial Hessian from); InitHess defaults to "read" if unset.
         max_core:             # autode's maximum number of cores, applied to its Config
                               # (method: orca; optional).
 
@@ -219,6 +236,7 @@ if __name__ == "__main__":
     n_cores = resolved["n_cores"]
     orca_keywords = resolved["orca_keywords"]
     basis = resolved["basis"]
+    irc = resolved["irc"]
     max_core = resolved["max_core"]
     extra_name_tag = resolved["extra_name_tag"]
 
@@ -240,6 +258,6 @@ if __name__ == "__main__":
 
     if method == 'orca':
         save_orca_inputs_from_xyz(input_fp, charge, mult, out_dir,
-                                  extra_name_tag=extra_name_tag, basis=basis)
+                                  extra_name_tag=extra_name_tag, basis=basis, irc=irc)
     elif method == 'vasp':
         save_vasp_inputs_from_xyz(input_fp, box_size, incar_settings, out_dir)

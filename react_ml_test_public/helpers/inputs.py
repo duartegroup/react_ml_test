@@ -52,6 +52,7 @@ from react_ml_test_public.helpers.settings import (
     TRAJ_DIR,
     expand_env_vars,
     get_model_colour,
+    load_external_paper_model_colours,
     resolve_csv_dir,
     resolve_data_path,
     resolve_md_checkpoint_dir,
@@ -178,6 +179,30 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
     The optional ``fair_chem_task`` (e.g. ``"omol"`` for molecules) and ``fair_chem_setting``
     (e.g. ``"turbo"``) fields configure a FairChem model listed in ``model_names``, exactly as
     they do for run_mlip_md.py's YAML; they are ignored by the other model loaders.
+
+    The optional ``custom_colour_dict`` field is a model_name : colour mapping (as
+    settings.PAPER_MODEL_COLOURS) used to colour the plots in place of PAPER_MODEL_COLOURS (see
+    ``get_model_colour``). Alternatively, the optional ``colour_dict_source`` field names an
+    entry of ``settings.EXTERNAL_COLOUR_DICT_SOURCES`` (e.g. ``"mf_mat_react"``) whose own
+    PAPER_MODEL_COLOURS is loaded instead, resolved relative to the cwd the script is run from
+    (see ``load_external_paper_model_colours``); ``custom_colour_dict`` and
+    ``colour_dict_source`` are mutually exclusive.
+
+    The optional ``use_react_profile_format`` field (default False) draws the reaction-profile
+    plot in the style of a traditional organic-chemistry reaction profile - a thick horizontal
+    energy-level marker over each point, joined by thin lines - instead of straight interpolated
+    line segments (see ``index_plot``); ``profile_segment_halfwidth`` (default 0.3) sets each
+    marker's half-width in index units.
+
+    The optional ``split_violin_by_config_type`` field (default False, run_multi_react_barrier.py
+    only) splits the aggregate energy- / force-error violin plots into one column per
+    ``config_type`` found in each trajectory's .extxyz info line (e.g. "TS" / "min"), in place of
+    the single combined "All Profiles" column.
+
+    The optional ``plot_each_barrier`` field (default False, run_multi_react_barrier.py only) is
+    passed straight through to ``reaction_barrier_comparison`` as its ``plot`` argument: when set,
+    each trajectory's own energy-error / reaction-profile / force-error plots are produced too, in
+    addition to the aggregate violin / scaling plots run_multi_react_barrier.py always produces.
     """
     input_config = _load_yaml_config(input_yaml_fpath, parser)
 
@@ -230,10 +255,24 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
     force_units = input_config.get("force_units", "meV / A")
     grid_lines = input_config.get("grid_lines", False)
     show_legend = input_config.get("show_legend", False)
+    use_react_profile_format = input_config.get("use_react_profile_format", False)
+    profile_segment_halfwidth = input_config.get("profile_segment_halfwidth", 0.3)
+    split_violin_by_config_type = input_config.get("split_violin_by_config_type", False)
+    plot_each_barrier = input_config.get("plot_each_barrier", False)
     cust_legend_colours = input_config.get("cust_legend_colours", ["black"])
     cust_legend_labels = input_config.get("cust_legend_labels", ["DFT"])
     cust_legend_linestyles = input_config.get("cust_legend_linestyles", ["dashed"])
     ref_point_labels = input_config.get("ref_point_labels", None)
+    custom_colour_dict = input_config.get("custom_colour_dict", None)
+    colour_dict_source = input_config.get("colour_dict_source", None)
+    if colour_dict_source is not None:
+        if custom_colour_dict is not None:
+            _error(parser, "custom_colour_dict and colour_dict_source are mutually exclusive "
+                           "- set only one in the input YAML.")
+        try:
+            custom_colour_dict = load_external_paper_model_colours(colour_dict_source)
+        except (ValueError, FileNotFoundError, AttributeError) as exc:
+            _error(parser, str(exc))
 
     # FairChem only: the task a fairchem model is run as (e.g. 'omol' for molecules) and its
     # inference settings (e.g. 'turbo'). Ignored by the other model loaders.
@@ -300,6 +339,10 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
         "forces_ylim": forces_ylim,
         "grid_lines": grid_lines,
         "show_legend": show_legend,
+        "use_react_profile_format": use_react_profile_format,
+        "profile_segment_halfwidth": profile_segment_halfwidth,
+        "split_violin_by_config_type": split_violin_by_config_type,
+        "plot_each_barrier": plot_each_barrier,
         "cust_legend_colours": cust_legend_colours,
         "cust_legend_labels": cust_legend_labels,
         "cust_legend_linestyles": cust_legend_linestyles,
@@ -307,6 +350,7 @@ def resolve_reaction_barrier_comparison_yaml(input_yaml_fpath: str, parser=None)
         "fair_chem_task": fair_chem_task,
         "fair_chem_setting": fair_chem_setting,
         "cuda_device": str(input_config.get("cuda_device", "cuda:0")),
+        "custom_colour_dict": custom_colour_dict,
     }
 
 
@@ -1150,6 +1194,70 @@ def _parse_orca_basis(basis_config, parser=None):
     return basis_entries
 
 
+# The keys of ORCA's %irc block, spelled as ORCA documents them; a key given in any
+# other case is normalised onto these, same as _ORCA_BASIS_BLOCK_KEYS_BY_LOWER
+_ORCA_IRC_BLOCK_KEYS = (
+    "InitHess", "Hess_Filename", "MaxIter", "Follow_CoordSys", "Print_TRJ",
+)
+_ORCA_IRC_BLOCK_KEYS_BY_LOWER = {key.lower(): key for key in _ORCA_IRC_BLOCK_KEYS}
+
+
+def _orca_irc_pair(key, value, parser=None):
+    """Normalise one ORCA ``%irc`` block key / value pair from the input YAML."""
+    key = str(key).strip()
+    if len(key.split()) != 1:
+        _error(parser, f"'irc' block keys must be a single word, got: {key!r}.")
+    # normalise a known key onto ORCA's own spelling (e.g. "hess_filename" -> "Hess_Filename")
+    key = _ORCA_IRC_BLOCK_KEYS_BY_LOWER.get(key.lower(), key)
+
+    # strip the quotation marks a Hess_Filename value may have in the YAML, if any
+    value = str(value).strip()
+    if len(value) > 1 and value[0] == value[-1] and value[0] in "\"'":
+        value = value[1:-1]
+    if not value:
+        _error(parser, f"Missing value for the 'irc' block key {key!r}.")
+
+    return key, value
+
+
+def _parse_orca_irc(irc_config, calc_type, parser=None):
+    """Parse the optional ``irc`` field of the save_dft_inputs_from_xyz YAML.
+
+    Returns a list of ORCA ``%irc`` block ``(key, value)`` pairs (see
+    ``helpers.io.format_orca_irc_block``), or None when ``calc_type`` is not ``"irc"``,
+    in which case no block is written into the generated input.
+
+    ``irc`` must be a mapping of block keys to values (unlike ``basis``, every ``%irc``
+    key is distinct, so there's no repeating-entry case to support), and must set
+    ``Hess_Filename`` (the .hess file IRC reads the initial Hessian from) - there is no
+    sensible default for it. ``InitHess`` defaults to ``"read"`` when unset, since the
+    whole point of supplying ``Hess_Filename`` is normally to read it:
+
+        calc_type: irc
+        irc:
+          Hess_Filename: "guajadial_TS_opt_wB97M.hess"
+          MaxIter: 250
+    """
+    if calc_type != "irc":
+        if irc_config is not None:
+            _error(parser, "'irc' is only used with calc_type: 'irc', but the input "
+                           f"YAML sets it with calc_type: {calc_type!r}.")
+        return None
+
+    if not isinstance(irc_config, dict) or not irc_config:
+        _error(parser, "'irc' must be a mapping of %irc block keys to values "
+                       "(e.g. Hess_Filename: ..., InitHess: read, MaxIter: 250) when "
+                       "calc_type: 'irc' is set.")
+
+    irc_entries = [_orca_irc_pair(key, value, parser) for key, value in irc_config.items()]
+    if not any(key.lower() == "hess_filename" for key, _ in irc_entries):
+        _error(parser, "'irc' must set 'Hess_Filename' (the .hess file IRC reads the "
+                       "initial Hessian from) when calc_type: 'irc' is set.")
+    if not any(key.lower() == "inithess" for key, _ in irc_entries):
+        irc_entries.insert(0, ("InitHess", "read"))
+    return irc_entries
+
+
 def resolve_save_dft_inputs_yaml(input_yaml_fpath: str, parser=None):
     """Load + process the input YAML for save_dft_inputs_from_xyz.py.
 
@@ -1171,6 +1279,15 @@ def resolve_save_dft_inputs_yaml(input_yaml_fpath: str, parser=None):
     input line cannot express - most usefully the auxiliary basis slots of ``%basis`` -
     and is returned as its ``(key, value)`` pairs for the script to write into each
     generated input file (see ``_parse_orca_basis``).
+
+    The optional ``calc_type`` field (``"sp"`` / ``"opt"`` / ``"irc"``, default ``"sp"``)
+    appends the matching literal ORCA job-type keyword (``Opt`` / ``IRC``) onto the
+    returned ``orca_keywords`` (which must then be set explicitly in the YAML, so there's
+    a list to append to), left untouched for the default ``"sp"``. ``calc_type: "irc"``
+    additionally requires the ``irc`` field (see ``_parse_orca_irc``), a mapping of
+    ``%irc`` block keys ORCA needs but ``orca_keywords`` cannot express (most usefully
+    ``Hess_Filename``, the .hess file IRC reads the initial Hessian from), returned as
+    its ``(key, value)`` pairs for the script to write into each generated input file.
     """
     input_config = _load_yaml_config(input_yaml_fpath, parser)
 
@@ -1185,6 +1302,14 @@ def resolve_save_dft_inputs_yaml(input_yaml_fpath: str, parser=None):
     if method not in ("orca", "vasp"):
         _error(parser, f"Unrecognised method: {method!r} (choose from 'orca' / 'vasp').")
     out_dir = resolve_out_root(input_config.get("out_dir", None) or DFT_DIR)
+
+    # ===== calculation type (ORCA only) =====
+    calc_type = str(input_config.get("calc_type", "sp")).lower()
+    if calc_type not in ("sp", "opt", "irc"):
+        _error(parser, f"Unrecognised calc_type: {calc_type!r} (choose from 'sp' / 'opt' / 'irc').")
+    if method != "orca" and calc_type != "sp":
+        _error(parser, "'calc_type' is only used by the ORCA method, but the input YAML "
+                       f"sets calc_type: {calc_type!r} with method: {method!r}.")
 
     # ===== input config file =====
     data_dir = input_config.get("data_dir", DATA_DIR)
@@ -1206,6 +1331,9 @@ def resolve_save_dft_inputs_yaml(input_yaml_fpath: str, parser=None):
         if input_config.get("basis", None) is not None:
             _error(parser, "'basis' is only used by the ORCA method, but the input YAML "
                            f"sets it with method: {method!r}.")
+        if input_config.get("irc", None) is not None:
+            _error(parser, "'irc' is only used by the ORCA method, but the input YAML "
+                           f"sets it with method: {method!r}.")
 
     n_cores = input_config.get("n_cores", None)
     n_cores = int(n_cores) if n_cores is not None else None
@@ -1213,6 +1341,18 @@ def resolve_save_dft_inputs_yaml(input_yaml_fpath: str, parser=None):
     if orca_keywords is not None and not isinstance(orca_keywords, list):
         _error(parser, "'orca_keywords' must be a list of ORCA keyword strings, "
                        "e.g. [\"WB97M-D3BJ\", \"def2-TZVPPD\", \"TightSCF\", \"EnGrad\"].")
+    # calc_type: "opt" / "irc" appends the matching literal job-type keyword, which needs
+    # an explicit orca_keywords list of its own to append to (there's no sensible default
+    # list to mutate otherwise)
+    if calc_type != "sp":
+        job_keyword = {"opt": "Opt", "irc": "IRC"}[calc_type]
+        if orca_keywords is None:
+            _error(parser, "'orca_keywords' must be set explicitly in the input YAML "
+                           f"when calc_type: {calc_type!r} is set (so the {job_keyword!r} "
+                           f"keyword can be appended to it).")
+        if not any(str(kw).lower() == job_keyword.lower() for kw in orca_keywords):
+            orca_keywords = orca_keywords + [job_keyword]
+    irc = _parse_orca_irc(input_config.get("irc", None), calc_type, parser)
     max_core = input_config.get("max_core", None)
     max_core = float(max_core) if max_core is not None else None
     extra_name_tag = input_config.get("extra_name_tag", None)
@@ -1237,6 +1377,7 @@ def resolve_save_dft_inputs_yaml(input_yaml_fpath: str, parser=None):
         "n_cores": n_cores,
         "orca_keywords": orca_keywords,
         "basis": basis,
+        "irc": irc,
         "max_core": max_core,
         "extra_name_tag": extra_name_tag,
         "box_size": box_size,

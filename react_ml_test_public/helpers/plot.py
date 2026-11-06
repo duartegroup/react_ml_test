@@ -1,5 +1,5 @@
 """Helpers for plotting."""
-from typing import List, Literal, Union
+from typing import List, Literal, Tuple, Union
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle, Patch
 import numpy as np
@@ -316,7 +316,9 @@ def index_plot(datasets: List[np.array],
                plot_settings: PlotSettings = PlotSettings(),
                ref_points: np.array = None,
                ref_point_labels: list[str] = None,
-               ref_label_offsets: list[float] = [2.0]
+               ref_label_offsets: list[float] = [2.0],
+               x_values: np.array = None,
+               y_errors: List[np.array] = None,
 ):
     """
     Creates a scatter / line plot of the dataset against its index and saves it as a PNG file. The first dataset in
@@ -327,10 +329,16 @@ def index_plot(datasets: List[np.array],
         save_fp (str): File path to save the output plot as a PNG.
         highlight_indices (list, optional): Indices of points to highlight with a different color.
         plot_as_lines (list, optional): list of indices of the input datasets to plot as lines.
+        x_values (np.array, optional): x-axis values to plot each dataset's points against,
+            in place of their index (e.g. number of atoms). Must be the same length as each
+            dataset. Ignored for a dataset plotted as a line (plot_as_lines).
+        y_errors (List[np.array], optional): one array per dataset of y-error values, drawn as
+            black error bars through each (scatter) point. None entries, or a None y_errors
+            itself, draw that dataset with no error bars.
     """
     plt.figure(figsize=fig_size, dpi=DPI)
 
-    indices = np.arange(0, len(datasets[0]))
+    indices = np.arange(0, len(datasets[0])) if x_values is None else np.asarray(x_values)
 
     # get discrete or continuous colour map
     if plot_settings.colour_map_type == 'discrete':
@@ -363,7 +371,7 @@ def index_plot(datasets: List[np.array],
         line_width = 1.0 if i in plot_settings.reference_indices else plot_settings.line_width
 
         if i in plot_as_lines:
-            plt.plot(indices, dataset, label=dataset_label, linestyle=line_style, 
+            plt.plot(indices, dataset, label=dataset_label, linestyle=line_style,
                      c=colour, zorder=z_order, linewidth=line_width,
                      alpha=alpha)
         else:
@@ -376,6 +384,12 @@ def index_plot(datasets: List[np.array],
 
                 plt.scatter(normal_indices, dataset[~highlight_mask])
                 plt.scatter(highlight_indices, dataset[highlight_mask], color='orange', s=plot_settings.point_size)
+            elif y_errors is not None and y_errors[i] is not None:
+                plt.errorbar(indices, dataset, yerr=y_errors[i],
+                             fmt='o', markersize=3, markerfacecolor=colour, markeredgecolor=colour,
+                             ecolor='black', elinewidth=0.8, capsize=2, zorder=z_order, alpha=alpha)
+                # legend-only proxy, so the legend shows just the scatter dot, not the error bar
+                plt.scatter([], [], label=dataset_label, s=plot_settings.point_size, c=colour, alpha=alpha)
             else:
                 plt.scatter(indices, dataset, label=dataset_label, s=plot_settings.point_size, c=colour, zorder=z_order, alpha=alpha)
 
@@ -428,7 +442,116 @@ def index_plot(datasets: List[np.array],
         plt.savefig(save_fp, format='png', dpi=600)
 
 
-def correlation_scatter_plot(ground_truth_set: np.ndarray, 
+def react_profile_plot(datasets: List[np.array],
+                       dataset_labels: List[str] = [''],
+                       save_fp: str = None,
+                       fig_size: tuple = SINGLE_COLUMN_FIG_SIZE,
+                       shade_region: tuple = None,
+                       plot_settings: PlotSettings = PlotSettings(),):
+    """
+    Creates a traditional organic-chemistry-style reaction profile plot and saves it as a PNG
+    file: every dataset is drawn as a thick horizontal energy-level marker over each point,
+    joined by thin lines, rather than index_plot's straight interpolated line segments
+    (plot_as_lines) or scatter points. The first dataset in the datasets list is assumed to be
+    the reference dataset if multiple are specified.
+
+    Parameters mirror index_plot's (``plot_settings.reference_indices`` / custom_colour_list /
+    custom_alpha_list / custom_linestyle_list / line_width select each series' styling exactly as
+    in index_plot), minus ``plot_as_lines`` / ``highlight_indices``, since every dataset here is
+    always drawn in the reaction-profile style.
+
+    Parameters:
+        data (iterable): The dataset to plot.
+        save_fp (str): File path to save the output plot as a PNG.
+    """
+    plt.figure(figsize=fig_size, dpi=DPI)
+
+    indices = np.arange(0, len(datasets[0]))
+
+    # get discrete or continuous colour map
+    if plot_settings.colour_map_type == 'discrete':
+        colours = [colour for colour in plot_settings.colour_scheme(np.arange(0, len(datasets) + 1))]
+    else:
+        colours = plot_settings.colour_scheme(np.linspace(0.3, 1.0, len(datasets) + 1))
+
+    # override with custom colour list
+    colours = plot_settings.custom_colour_list if plot_settings.custom_colour_list is not None else colours
+    alphas = plot_settings.custom_alpha_list if plot_settings.custom_alpha_list is not None else [1.0] * len(datasets)
+
+    assert all([len(dataset) == len(indices) for dataset in datasets])
+
+    half_width = plot_settings.profile_segment_halfwidth
+    marker_linewidth = 1.5
+
+    colour_index, alpha_index = 0, 0
+    for i, (dataset, dataset_label) in enumerate(zip(datasets, dataset_labels)):
+
+        if i in plot_settings.reference_indices:
+            colour = "black"
+            alpha = 1.0
+            z_order = 3
+
+            # thin line from each marker's right edge to the next marker's left edge
+            for x in indices[:-1]:
+                plt.plot([x + half_width, x + 1 - half_width], [dataset[x], dataset[x + 1]],
+                            color=colour, linestyle='-', linewidth=0.3,
+                            zorder=z_order, alpha=alpha)
+        else:
+            colour = colours[colour_index]
+            alpha = alphas[alpha_index]
+            colour_index += 1
+            alpha_index += 1
+            z_order = 1
+
+        # thick horizontal energy-level marker over each point, as in a traditional
+        # organic-chemistry reaction profile
+        for j, x in enumerate(indices):
+            plt.plot([x - half_width, x + half_width], [dataset[x], dataset[x]],
+                     color=colour, linewidth=marker_linewidth, solid_capstyle='butt',
+                     zorder=z_order + 1, alpha=alpha,
+                     label=dataset_label if j == 0 else None)
+
+
+    if shade_region is not None:
+        plt.axvspan(shade_region[0], shade_region[1], color='lightgrey', alpha=0.5, edgecolor=None, linewidth=0)
+
+    plt.ylabel(plot_settings.y_label)
+    plt.gca().yaxis.set_major_locator(MaxNLocator(nbins=5))
+    plt.yticks(fontsize=10)
+
+    # hide the x-axis entirely (ticks, tick labels, axis label) and the top/right/bottom box
+    # lines, as in a traditional reaction-profile diagram - only the energy (y) axis remains
+    plt.gca().xaxis.set_visible(False)
+    for spine in ('top', 'right', 'bottom'):
+        plt.gca().spines[spine].set_visible(False)
+
+    if plot_settings.use_log_y_scale:
+        plt.yscale("log")
+    if plot_settings.title is not None:
+        plt.title(plot_settings.title)
+
+    if plot_settings.show_legend:
+        # unlike index_plot, no custom cust_legend_colours/labels/linestyles override here: that
+        # would replace the per-dataset handles below with a single fixed entry (e.g. just
+        # "DFT"), so the legend instead shows every dataset's own labelled marker, exactly once
+        plt.legend(fontsize=plot_settings.legend_fontsize, loc=plot_settings.legend_loc, frameon=False, ncol=plot_settings.legend_ncols)
+
+    if plot_settings.highlight_region is not None:
+        bl_x, bl_y, w, h = plot_settings.highlight_region
+        plt.gca().add_patch(Rectangle((bl_x, bl_y), w, h, color=plot_settings.highlight_colour, alpha=0.15, edgecolor='none'))
+
+    if plot_settings.grid_lines:
+        plt.grid(color='grey', alpha=0.1)
+
+    if plot_settings.ylim is not None:
+        plt.ylim(plot_settings.ylim)
+
+    plt.tight_layout()
+    if save_fp is not None:
+        plt.savefig(save_fp, format='png', dpi=600)
+
+
+def correlation_scatter_plot(ground_truth_set: np.ndarray,
                              predicted_sets: List[np.ndarray],
                              prediction_names: List[str],
                              save_fp: str = None,
@@ -606,6 +729,39 @@ def bar_plot(datasets: List[np.array],
         plt.show()
     plt.close()
 
+def _violin_slot_assignments(model_names: List[str], num_base_models: int, num_base_model_comps: int) -> List[Tuple[int, int]]:
+    """
+    Map each name in model_names to its (base_rank, comp_index) position in the full (base model)
+    x (comparison) grid, by grouping names on shared prefixes exactly as
+    ``_infer_base_model_grouping`` does. This keeps each model's x_offset / clip orientation tied
+    to its actual base model and comparison number, rather than to its position in model_names, so:
+    - a base model missing one of its comparisons (model_names shorter than the full grid) doesn't
+      shift every later base model's comparisons into the wrong half of their split violin.
+    - num_base_model_comps == 1 (no fine-tuned comparison at all) draws one full violin per base
+      model instead of alternating left/right halves as if every base model had 2 comparisons.
+
+    :param model_names: model names being plotted, in plotting order
+    :param num_base_models: number of unique base models in the full grid
+    :param num_base_model_comps: number of comparisons per base model in the full grid
+    :return: for each name in model_names, its (base_rank, comp_index) in the
+            num_base_models x num_base_model_comps grid
+    """
+    base_names = [name for name in model_names
+                 if not any(other != name and name.startswith(other) for other in model_names)]
+    comp_counts = {base: 0 for base in base_names}
+    assignments = []
+    for name in model_names:
+        base = max((b for b in base_names if name == b or name.startswith(b)), key=len)
+        comp_index = comp_counts[base]
+        comp_counts[base] += 1
+        assert comp_index < num_base_model_comps, (
+            f"'{name}' is comparison #{comp_index + 1} of base model '{base}', but "
+            f"num_base_model_comps is {num_base_model_comps}."
+        )
+        assignments.append((base_names.index(base), comp_index))
+    return assignments
+
+
 def violin_plot(model_datasets: List[List[np.array]],
                 model_names: List[str],
                 dataset_names: List[str],
@@ -617,36 +773,48 @@ def violin_plot(model_datasets: List[List[np.array]],
     assert plot_settings.num_base_models is not None, "For a violin plot you need to specify the number of base models to compare."
     assert plot_settings.num_base_model_comps is not None, "For a violin plot you need to specify the number of comparisons per base model to make."
     # assert len(dataset_names) == len(model_datasets[0])
-    
+
     n = plot_settings.num_base_models
+    num_comps = plot_settings.num_base_model_comps
     possible_offsets = [(k - (n - 1) / 2) * 0.16 for k in range(n)]
-    clip_offsets = [off for k in range(n) for off in [1, 0]]
-    x_offsets = [off for off in possible_offsets for _ in range(plot_settings.num_base_model_comps)]
+    assignments = _violin_slot_assignments(model_names, n, num_comps)
     for j, model_name in enumerate(model_names):
-        positions = [k + 1 + x_offsets[j] for k in range(len(dataset_names))]
+        base_rank, comp_index = assignments[j]
+        slot = base_rank * num_comps + comp_index
+        # 1 comparison per base model -> one full (unclipped) violin; 2 -> split into a left
+        # (comp_index 0) / right (comp_index 1) half so the base + fine-tuned models overlay at
+        # the same x position
+        clip_offset = 0.5 if num_comps <= 1 else (1 if comp_index == 0 else 0)
+        positions = [k + 1 + possible_offsets[base_rank] for k in range(len(dataset_names))]
         y = [model_datasets[i][j] for i in range(len(dataset_names))]
         parts = ax.violinplot(y, positions=positions, widths=0.22, showmeans=False, showmedians=True)
 
         for k, body in enumerate(parts["bodies"]):
             body.set_facecolor(plot_settings.custom_colour_list[j])
             body.set_edgecolor("black")
-            body.set_alpha(plot_settings.custom_alpha_list[j])
-            clip = Rectangle((positions[k] - clip_offsets[j], -1e6), 1, 2e6, transform=ax.transData)
+            body.set_alpha(plot_settings.custom_alpha_list[slot])
+            clip = Rectangle((positions[k] - clip_offset, -1e6), 1, 2e6, transform=ax.transData)
             body.set_clip_path(clip)
 
         for comp in ("cbars", "cmins", "cmaxes", "cmedians"):
             parts[comp].set_edgecolor("black")
             parts[comp].set_linewidth(0.8)
-            parts[comp].set_alpha(plot_settings.custom_alpha_list[j])
+            parts[comp].set_alpha(plot_settings.custom_alpha_list[slot])
 
-    ax.set_xticks(list(range(1, len(dataset_names) + 1)))
-    ax.set_xticklabels(dataset_names, fontsize=10)
+    if plot_settings.xtick_labels:
+        ax.set_xticks(list(range(1, len(dataset_names) + 1)))
+        ax.set_xticklabels(dataset_names, fontsize=10)
+    else:
+        ax.set_xticks([])
+
     ax.set_xlim(0.5, len(dataset_names) + 0.5)
     ax.tick_params(axis='y', labelsize=10)
     if plot_settings.ylim is not None:
         ax.set_ylim(plot_settings.ylim)
     if plot_settings.use_log_y_scale:
         plt.yscale("log")
+    if plot_settings.show_legend:
+        plt.legend()
     # else:
     #     plt.gca().yaxis.set_major_locator(MaxNLocator(integer=True))
     # ax.set_xlabel(r"Config Type", fontsize=10)

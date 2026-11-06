@@ -6,7 +6,7 @@ import os
 from typing import Callable, Literal, Tuple, List
 import numpy as np
 from react_ml_test_public.helpers.io import flexible_ase_read, get_name_from_path, load_isolated_atom_energies, load_data_cache, load_model_calculator, save_npz_data_cache
-from react_ml_test_public.helpers.plot import index_plot
+from react_ml_test_public.helpers.plot import index_plot, react_profile_plot
 from react_ml_test_public.helpers.settings import CSV_DIR, EV, EV_PER_AMSTRONG, KCAL_PER_MOL, MEV, MEV_PER_AMSTRONG, MEV_PER_ATOM, NPZ_DIR, PLOT_DIR, PlotSettings, get_model_colour, resolve_model_dir
 from react_ml_test_public.helpers.stats import calculate_rmse_on_errors
 from react_ml_test_public.helpers.utils import convert_units, get_ase_props
@@ -286,7 +286,7 @@ def _infer_base_model_grouping(model_names: List[str]) -> Tuple[int, int]:
 
 def reaction_barrier_comparison(model_names: List[str],
                                 test_trj_fpath: str,
-                                plot_settings: PlotSettings,
+                                global_plot_settings: PlotSettings,
                                 plot: bool = True,
                                 save_name: str = None,
                                 alpha_list: List[float] = None,
@@ -315,22 +315,19 @@ def reaction_barrier_comparison(model_names: List[str],
     ``cuda_device`` is expected to be already resolved (see ``resolve_cuda_device``), as the
     calculators fall back to 'cpu' internally anyway.
 
-    :param model_names: list of model names to compare, in plotting order. The number of base
-                        models and the number of comparisons per base model (i.e. how many times
-                        alpha_list / linestyle_list are repeated) are inferred from this list
-                        (see ``_infer_base_model_grouping``), rather than given explicitly.
+    :param model_names: list of model names to compare, in plotting order.
     :param test_trj_fpath: path to the IRC trajectory (an .xyz / .extxyz file) to compare against
-    :param plot_settings: plot appearance settings, used (and specialised per plot) for the
-                          energy-error / reaction-profile / force-error plots. Supplies
-                          x_label (x-axis label for the reaction-profile plot, e.g. "IRC Image"),
-                          energies_ylim / forces_ylim (y-limits for the reaction-profile / force
-                          -error plots), grid_lines, show_legend, and the cust_legend_* fields
-                          (legend colours / labels / line styles for the reference (DFT) line)
+    :param global_plot_settings: plot appearance settings, used (and specialised per plot) for
+                          the energy-error / reaction-profile / force-error plots.
+                          ``use_react_profile_format`` applies only to the reaction-profile plot:
+                          when set, it is drawn with ``react_profile_plot`` instead of
+                          ``index_plot`` - every series as a traditional organic-chemistry
+                          reaction profile (a thick horizontal energy-level marker over each
+                          point, joined by thin lines) instead of straight interpolated line
+                          segments; ``profile_segment_halfwidth`` sets each marker's half-width.
     :param plot: whether to produce the per-reaction energy-error / reaction-profile /
                 force-error plots (the CSV is always written, and the returned error values
-                are always computed, regardless of this flag). Set to False by
-                ``run_multi_react_barrier`` to skip these, since it draws its own aggregate
-                violin plots instead.
+                are always computed, regardless of this flag).
     :param save_name: output name, used in the saved plot / CSV file names.
     :param alpha_list: alpha values used for plotting, repeated once per base model.
                        Defaults to [1.0]
@@ -356,6 +353,9 @@ def reaction_barrier_comparison(model_names: List[str],
               - "force_errors": per-config mean absolute force-norm errors (np.ndarray), or
                 None when ``include_forces`` is False
               - "barrier_energy_error": predicted - reference barrier (peak) energy (float)
+              - "ref_barrier_energy": the DFT reference barrier (peak) energy, relative to its
+                own reactant - the same value for every model, since it does not depend on any
+                model's predictions (float)
             The plots are written to plot_dir/irc and the CSV to csv_dir regardless.
     """
 
@@ -367,14 +367,18 @@ def reaction_barrier_comparison(model_names: List[str],
     os.makedirs(csv_dir, exist_ok=True)
 
     # unpacked from plot_settings, and specialised per plot further down
-    xlabel = plot_settings.x_label
-    energies_ylim = plot_settings.energies_ylim
-    forces_ylim = plot_settings.forces_ylim
-    grid_lines = plot_settings.grid_lines
-    show_legend = plot_settings.show_legend
-    cust_legend_colours = plot_settings.cust_legend_colours
-    cust_legend_labels = plot_settings.cust_legend_labels
-    cust_legend_linestyles = plot_settings.cust_legend_linestyles
+    xlabel = global_plot_settings.x_label
+    energies_ylim = global_plot_settings.energies_ylim
+    forces_ylim = global_plot_settings.forces_ylim
+    grid_lines = global_plot_settings.grid_lines
+    show_legend = global_plot_settings.show_legend
+    cust_legend_colours = global_plot_settings.cust_legend_colours
+    cust_legend_labels = global_plot_settings.cust_legend_labels
+    cust_legend_linestyles = global_plot_settings.cust_legend_linestyles
+    custom_colour_dict = global_plot_settings.custom_colour_dict
+    use_react_profile_format = global_plot_settings.use_react_profile_format
+    profile_segment_halfwidth = global_plot_settings.profile_segment_halfwidth
+    line_width = global_plot_settings.line_width
 
     model_dir = resolve_model_dir(model_dir)
 
@@ -388,7 +392,7 @@ def reaction_barrier_comparison(model_names: List[str],
 
     # colour each model by name, so fine-tuned / from-scratch runs inherit the colour of
     # the base model whose name is a stub of theirs
-    colours = [get_model_colour(x) for x in model_names]
+    colours = [get_model_colour(x, custom_colour_dict=custom_colour_dict) for x in model_names]
 
     # run comparison
     # get test set ground truth  and forces
@@ -422,10 +426,11 @@ def reaction_barrier_comparison(model_names: List[str],
 
     # plot index plot of absolute energy errors (energy_plot_settings is also the basis for
     # the force-error plot settings further down, so it is built regardless of `plot`)
-    energy_plot_settings = PlotSettings(x_label='Index', y_label=f"Energy RMSE ({energy_units})", custom_colour_list=colours,
+    energy_plot_settings = PlotSettings(x_label='Index', y_label=f"Energy Error ({energy_units})", custom_colour_list=colours,
                                 show_legend=show_legend,
                                 custom_alpha_list=custom_alpha_list,
-                                custom_linestyle_list=custom_linestyle_list)
+                                custom_linestyle_list=custom_linestyle_list,
+                                line_width=global_plot_settings.line_width)
     if plot:
         save_fp = f"{plot_dir}/irc/{test_set_name}_{save_name}_energy_errors.png"
         index_plot(energy_errors,                   formatted_model_names,
@@ -461,18 +466,28 @@ def reaction_barrier_comparison(model_names: List[str],
                                     legend_fontsize=8,
                                     custom_colour_list=colours,
                                     custom_linestyle_list=[(0, (1, 1))] + custom_linestyle_list,
-                                    line_width=2.0,
+                                    line_width=line_width,
+                                    profile_segment_halfwidth=profile_segment_halfwidth,
                                     )
 
-        index_plot(combined_datasets,
+
+        if use_react_profile_format:
+            react_profile_plot(combined_datasets,
                 dataset_names,
                 save_fp,
-                plot_as_lines=[i for i in range(len(combined_datasets))],  # or, only 0
+                plot_settings=step_plot_settings,
+            )
+        else:
+            index_plot(combined_datasets,
+                dataset_names,
+                save_fp,
                 plot_settings=step_plot_settings,
                 ref_points=[(0, 0.0), (ref_peak_pos, ref_peak_energy), (len(combined_datasets[0]) + ref_prod_index, ref_prod_energy)],
                 ref_point_labels=ref_point_labels,
-                ref_label_offsets=[5.0, -10.0, 20.0]
+                ref_label_offsets=[5.0, -10.0, 20.0],
+                plot_as_lines=[i for i in range(len(combined_datasets))]
                 )
+
         logger.info(f"Saved reaction plot to {save_fp}...")
 
     # if forces are included
@@ -528,6 +543,7 @@ def reaction_barrier_comparison(model_names: List[str],
             "energy_errors": energy_errors[i],
             "force_errors": model_force_norm_errors[i] if include_forces else None,
             "barrier_energy_error": float(ref_peak_energy_error),
+            "ref_barrier_energy": float(ref_peak_energy),
         }
 
     # save csv

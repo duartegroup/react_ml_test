@@ -1,6 +1,7 @@
 """
 Config file containing file paths for data and outputs, and other general settings.
 """
+import importlib.util
 import os
 import platform
 import random
@@ -59,9 +60,57 @@ _RANDOM_TAB10_COLOUR = object()
 # counts as the same colour in the fallback above
 _MIN_FALLBACK_COLOUR_DISTANCE = 0.05
 
+# named external colour-dict sources: name -> path (relative to the cwd the script is run
+# from) of a standalone .py file exposing its own PAPER_MODEL_COLOURS dict, for YAMLs whose
+# colour_dict_source field names a sibling repo's colours instead of hand-copying them
+# (see load_external_paper_model_colours)
+EXTERNAL_COLOUR_DICT_SOURCES = {
+    "mf_mat_react": "helpers/settings.py",
+}
+
+
+def load_external_paper_model_colours(source_name: str) -> dict:
+    """
+    PAPER_MODEL_COLOURS from a sibling repo named in EXTERNAL_COLOUR_DICT_SOURCES.
+
+    The target is a standalone .py file (not an importable package), loaded by file path
+    relative to the current working directory - matching the convention that a sibling
+    repo's YAML inputs are run with that repo's root as cwd.
+
+    :param source_name: a key of EXTERNAL_COLOUR_DICT_SOURCES, e.g. "mf_mat_react"
+    :raises ValueError: source_name is not a known source
+    :raises FileNotFoundError: the mapped file does not exist relative to the cwd
+    :raises AttributeError: the file loads but defines no PAPER_MODEL_COLOURS
+    """
+    if source_name not in EXTERNAL_COLOUR_DICT_SOURCES:
+        raise ValueError(f"Unknown colour_dict_source: {source_name!r} "
+                         f"(choose from {sorted(EXTERNAL_COLOUR_DICT_SOURCES)}).")
+
+    rel_path = EXTERNAL_COLOUR_DICT_SOURCES[source_name]
+    fpath = os.path.abspath(rel_path)
+    if not os.path.isfile(fpath):
+        raise FileNotFoundError(
+            f"colour_dict_source {source_name!r} expects {rel_path!r} relative to the "
+            f"current working directory, but {fpath!r} does not exist. Run this script "
+            f"from {source_name}'s repository root."
+        )
+
+    # load as a standalone module (not part of any package), since mf_mat_react is not
+    # importable / has no __init__.py anywhere
+    spec = importlib.util.spec_from_file_location(f"_external_colours_{source_name}", fpath)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    if not hasattr(module, "PAPER_MODEL_COLOURS"):
+        raise AttributeError(
+            f"{fpath!r} (colour_dict_source {source_name!r}) has no PAPER_MODEL_COLOURS."
+        )
+    return module.PAPER_MODEL_COLOURS
+
 
 def get_model_colour(model_name: str,
-                     default: object = _RANDOM_TAB10_COLOUR) -> Optional[str]:
+                     default: object = _RANDOM_TAB10_COLOUR,
+                     custom_colour_dict: dict | None = None) -> str:
     """
     Colour a model is plotted in, looked up flexibly from PAPER_MODEL_COLOURS.
 
@@ -78,14 +127,20 @@ def get_model_colour(model_name: str,
     :param model_name: model name (or plot label) to look a colour up for
     :param default: colour used when no PAPER_MODEL_COLOURS key is a stub of the name, or None
                     to return None for such a name
+    :param custom_colour_dict: a custom dictionary of model names : colours to look the colour up
+                               from, in place of PAPER_MODEL_COLOURS
     :return: the colour, or ``default`` (None) when the name has no mapped colour
     """
-    matching_stubs = [stub for stub in PAPER_MODEL_COLOURS if stub in model_name]
+
+    # use either a provided colour dict, or the default colour dict to match model names to colours
+    colour_dict = PAPER_MODEL_COLOURS if custom_colour_dict is None else custom_colour_dict
+    matching_stubs = [stub for stub in colour_dict if stub in model_name]
     if matching_stubs:
-        return PAPER_MODEL_COLOURS[max(matching_stubs, key=len)]
+        return colour_dict[max(matching_stubs, key=len)]
+        
+    # return default or random tab10 colour if cannot be found
     if default is not _RANDOM_TAB10_COLOUR:
         return default
-
     return _random_model_colour(model_name)
 
 
@@ -547,11 +602,19 @@ class PlotSettings(NamedTuple):
     highlight_region: tuple = None
     highlight_colour: str = 'green'
     line_width: float = 1.0
+    use_react_profile_format: bool = False  # draw plot_as_lines series as a traditional
+                                            # organic-chemistry reaction profile - a thick
+                                            # horizontal energy-level marker over each point,
+                                            # joined by thin lines - instead of straight
+                                            # interpolated line segments (see index_plot)
+    profile_segment_halfwidth: float = 0.3  # half-width (in index units) of each horizontal
+                                            # energy-level marker, when use_react_profile_format
     grid_lines: bool = False
     horizontal_ref_line: float = None
     reverse_x: bool = False
     reverse_y: bool = False
     x_ticks: tuple = None # ()
+    xtick_labels: bool = True
     y_ticks: tuple = None
     x_num_dp: int = None
     y_num_dp: int = None
@@ -576,6 +639,8 @@ class PlotSettings(NamedTuple):
     normalise_colour_bar: bool = False
     custom_markers: list = None
     custom_colour_list: list = None
+    custom_colour_dict: dict = None  # model_name : colour mapping, passed to get_model_colour
+                                     # in place of PAPER_MODEL_COLOURS
     custom_linestyle_list: list = None
     custom_alpha_list: list = None
     custom_zorder_list: list = None

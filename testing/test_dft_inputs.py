@@ -19,6 +19,7 @@ import pytest
 from react_ml_test_public.helpers import inputs as rmlt_inputs
 from react_ml_test_public.helpers.io import (
     format_orca_basis_block,
+    format_orca_irc_block,
     insert_orca_input_block,
 )
 from react_ml_test_public.helpers.settings import DFT_DIR
@@ -76,6 +77,7 @@ input_fpath: "{config_fpath}"
         assert resolved["out_dir"] == DFT_DIR
         assert resolved["n_cores"] is None
         assert resolved["orca_keywords"] is None
+        assert resolved["irc"] is None
         assert resolved["max_core"] is None
         assert resolved["extra_name_tag"] is None
         # VASP-only settings are not resolved for ORCA
@@ -299,6 +301,147 @@ basis: AuxJ "aug-cc-pVTZ/JK"
     def test_unknown_entry_type_is_reported(self, tmp_path, config_fpath):
         with pytest.raises(ValueError, match="'basis' entries must be strings or mappings"):
             self._basis_of(tmp_path, config_fpath, "basis: [1, 2]")
+
+
+class TestSaveDftInputsCalcType:
+    """The optional ``calc_type`` field, appending the ORCA job-type keyword."""
+
+    def _resolve(self, tmp_path, config_fpath, extra_yaml):
+        yaml_fpath = _write_yaml(tmp_path, f"""
+input_fpath: "{config_fpath}"
+{extra_yaml}
+""" + BASE_ORCA_BODY)
+        return rmlt_inputs.resolve_save_dft_inputs_yaml(yaml_fpath)
+
+    def test_defaults_to_sp_and_leaves_orca_keywords_untouched(self, tmp_path, config_fpath):
+        resolved = self._resolve(tmp_path, config_fpath,
+                                 'orca_keywords: ["WB97M-D3BJ", "def2-TZVP"]')
+
+        assert resolved["orca_keywords"] == ["WB97M-D3BJ", "def2-TZVP"]
+        assert resolved["irc"] is None
+
+    def test_opt_appends_opt_keyword(self, tmp_path, config_fpath):
+        resolved = self._resolve(tmp_path, config_fpath, """
+calc_type: "opt"
+orca_keywords: ["WB97M-D3BJ", "def2-TZVP"]
+""")
+
+        assert resolved["orca_keywords"] == ["WB97M-D3BJ", "def2-TZVP", "Opt"]
+
+    def test_opt_does_not_duplicate_an_existing_keyword(self, tmp_path, config_fpath):
+        resolved = self._resolve(tmp_path, config_fpath, """
+calc_type: "opt"
+orca_keywords: ["WB97M-D3BJ", "def2-TZVP", "Opt"]
+""")
+
+        assert resolved["orca_keywords"] == ["WB97M-D3BJ", "def2-TZVP", "Opt"]
+
+    def test_opt_requires_orca_keywords(self, tmp_path, config_fpath):
+        with pytest.raises(ValueError, match="'orca_keywords' must be set explicitly"):
+            self._resolve(tmp_path, config_fpath, 'calc_type: "opt"')
+
+    def test_irc_appends_irc_keyword_and_defaults_inithess(self, tmp_path, config_fpath):
+        resolved = self._resolve(tmp_path, config_fpath, """
+calc_type: "irc"
+orca_keywords: ["WB97M-D3BJ", "def2-TZVP"]
+irc:
+  Hess_Filename: "guajadial_TS_opt_wB97M.hess"
+  MaxIter: 250
+""")
+
+        assert resolved["orca_keywords"] == ["WB97M-D3BJ", "def2-TZVP", "IRC"]
+        assert resolved["irc"] == [("InitHess", "read"),
+                                   ("Hess_Filename", "guajadial_TS_opt_wB97M.hess"),
+                                   ("MaxIter", "250")]
+
+    def test_irc_inithess_is_not_overridden_if_set(self, tmp_path, config_fpath):
+        resolved = self._resolve(tmp_path, config_fpath, """
+calc_type: "irc"
+orca_keywords: ["WB97M-D3BJ", "def2-TZVP"]
+irc:
+  InitHess: "calc_numfreq"
+  Hess_Filename: "guajadial_TS_opt_wB97M.hess"
+""")
+
+        assert resolved["irc"] == [("InitHess", "calc_numfreq"),
+                                   ("Hess_Filename", "guajadial_TS_opt_wB97M.hess")]
+
+    def test_irc_requires_hess_filename(self, tmp_path, config_fpath):
+        with pytest.raises(ValueError, match="'irc' must set 'Hess_Filename'"):
+            self._resolve(tmp_path, config_fpath, """
+calc_type: "irc"
+orca_keywords: ["WB97M-D3BJ", "def2-TZVP"]
+irc:
+  MaxIter: 250
+""")
+
+    def test_irc_field_requires_calc_type_irc(self, tmp_path, config_fpath):
+        with pytest.raises(ValueError, match="'irc' is only used with calc_type: 'irc'"):
+            self._resolve(tmp_path, config_fpath, """
+orca_keywords: ["WB97M-D3BJ", "def2-TZVP"]
+irc:
+  Hess_Filename: "guajadial_TS_opt_wB97M.hess"
+""")
+
+    def test_unknown_calc_type_is_reported(self, tmp_path, config_fpath):
+        with pytest.raises(ValueError, match="Unrecognised calc_type"):
+            self._resolve(tmp_path, config_fpath, 'calc_type: "freq"')
+
+    def test_calc_type_is_reported_for_vasp(self, tmp_path, config_fpath):
+        yaml_fpath = _write_yaml(tmp_path, f"""
+input_fpath: "{config_fpath}"
+method: "vasp"
+box_size: 40.0
+calc_type: "opt"
+""")
+
+        with pytest.raises(ValueError, match="'calc_type' is only used by the ORCA method"):
+            rmlt_inputs.resolve_save_dft_inputs_yaml(yaml_fpath)
+
+    def test_irc_field_is_reported_for_vasp(self, tmp_path, config_fpath):
+        yaml_fpath = _write_yaml(tmp_path, f"""
+input_fpath: "{config_fpath}"
+method: "vasp"
+box_size: 40.0
+irc:
+  Hess_Filename: "guajadial_TS_opt_wB97M.hess"
+""")
+
+        with pytest.raises(ValueError, match="'irc' is only used by the ORCA method"):
+            rmlt_inputs.resolve_save_dft_inputs_yaml(yaml_fpath)
+
+
+class TestOrcaIrcBlock:
+
+    def test_block_lines(self):
+        block = format_orca_irc_block([("InitHess", "read"),
+                                       ("Hess_Filename", "guajadial_TS_opt_wB97M.hess"),
+                                       ("MaxIter", "250")])
+
+        assert block == ('%irc\n'
+                         '  InitHess read\n'
+                         '  Hess_Filename "guajadial_TS_opt_wB97M.hess"\n'
+                         '  MaxIter 250\n'
+                         'end\n')
+
+    def test_block_is_inserted_after_the_simple_input_line(self, tmp_path):
+        inp_fpath = tmp_path / "config_0_orca.inp"
+        inp_fpath.write_text("! WB97M-D3BJ def2-TZVP IRC\n"
+                             "%pal\nnprocs 16\nend\n"
+                             "*xyz 0 1\nH 0.0 0.0 0.0\n*\n")
+
+        insert_orca_input_block(str(inp_fpath),
+                                format_orca_irc_block([("InitHess", "read"),
+                                                       ("Hess_Filename", "name.hess")]))
+
+        assert inp_fpath.read_text() == (
+            "! WB97M-D3BJ def2-TZVP IRC\n"
+            "%irc\n"
+            "  InitHess read\n"
+            '  Hess_Filename "name.hess"\n'
+            "end\n"
+            "%pal\nnprocs 16\nend\n"
+            "*xyz 0 1\nH 0.0 0.0 0.0\n*\n")
 
 
 class TestOrcaBasisBlock:

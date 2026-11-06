@@ -486,6 +486,36 @@ def _orca_block_value(value) -> str:
     return f'"{text}"'
 
 
+# %irc block keys (lowercased) whose value is a quoted string; every other key's value
+# is written bare, since %irc mixes keyword enums (InitHess read) and numbers (MaxIter
+# 250) with the one quoted filename (Hess_Filename), unlike %basis's "quote everything"
+_ORCA_IRC_QUOTED_KEYS = {"hess_filename"}
+
+
+def format_orca_irc_block(irc_entries: List[tuple]) -> str:
+    """
+    Format the lines of an ORCA ``%irc`` block from ``(key, value)`` pairs.
+
+    Unlike ``%basis``, ORCA's ``%irc`` block mixes quoted filenames (``Hess_Filename
+    "name.hess"``) with bare keyword enums (``InitHess read``) and bare numbers
+    (``MaxIter 250``), so only the keys in ``_ORCA_IRC_QUOTED_KEYS`` are quoted.
+
+    Parameters:
+        irc_entries (list): (key, value) pairs, e.g. [("Hess_Filename", "name.hess")]
+
+    Returns:
+        (str): The block, e.g. ``%irc\\n  InitHess read\\nend\\n``
+    """
+
+    lines = ["%irc"]
+    for key, value in irc_entries:
+        rendered = _orca_block_value(value) if key.lower() in _ORCA_IRC_QUOTED_KEYS else value
+        lines.append(f"  {key} {rendered}")
+    lines.append("end")
+
+    return "\n".join(lines) + "\n"
+
+
 def insert_orca_input_block(input_fpath: str, block: str) -> None:
     """
     Insert a block into a generated ORCA input file, after the leading ``!`` line.

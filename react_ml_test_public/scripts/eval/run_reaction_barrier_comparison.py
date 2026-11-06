@@ -71,6 +71,19 @@ if __name__ == "__main__":
                                 # Ignored by the other model loaders.
         cuda_device:            # GPU device for the MLIP calculators (default "cuda:0",
                                 # falls back to "cpu" if that device is not found).
+        custom_colour_dict:     # optional model_name : colour mapping to colour the plots with,
+                                # in place of settings.py's PAPER_MODEL_COLOURS (see
+                                # get_model_colour).
+        colour_dict_source:     # optional alternative to custom_colour_dict: a name from
+                                # settings.EXTERNAL_COLOUR_DICT_SOURCES whose repo's PAPER_MODEL_COLOURS
+                                # is loaded instead (mutually exclusive with custom_colour_dict).
+        use_react_profile_format: # whether to draw the reaction-profile plot in the style of a
+                                # traditional organic-chemistry reaction profile - a thick
+                                # horizontal energy-level marker over each point, joined by thin
+                                # lines - instead of straight interpolated line segments
+                                # (default False).
+        profile_segment_halfwidth: # half-width (in index units) of each horizontal energy-level
+                                # marker, when use_react_profile_format is set (default 0.3).
 
     Any omitted field is set to None.
     """
@@ -123,6 +136,9 @@ if __name__ == "__main__":
     energies_ylim = resolved["energies_ylim"]
     forces_ylim = resolved["forces_ylim"]
     cuda_device = resolved["cuda_device"]
+    custom_colour_dict = resolved["custom_colour_dict"]
+    use_react_profile_format = resolved["use_react_profile_format"]
+    profile_segment_halfwidth = resolved["profile_segment_halfwidth"]
     del resolved
 
     # resolve the requested device (i.e. fall back to 'cpu' if the GPU is not available)
@@ -138,7 +154,11 @@ if __name__ == "__main__":
                                 show_legend=show_legend,
                                 cust_legend_colours=cust_legend_colours,
                                 cust_legend_labels=cust_legend_labels,
-                                cust_legend_linestyles=cust_legend_linestyles)
+                                cust_legend_linestyles=cust_legend_linestyles,
+                                custom_colour_dict=custom_colour_dict,
+                                use_react_profile_format=use_react_profile_format,
+                                profile_segment_halfwidth=profile_segment_halfwidth,
+                                line_width=2.0)
 
     # run the comparison (see helpers/model_eval.py): writes the energy-error /
     # reaction-profile / force-error plots and the per-model CSV
